@@ -10,69 +10,74 @@
       "editor": "textarea",
       "isSecret": true
     },
-    "usersToFollow": {
-      "title": "Users to Follow",
-      "type": "array",
-      "description": "List of Instagram usernames to follow",
-      "editor": "stringList"
+    "accountType": {
+      "title": "Account Type",
+      "type": "string",
+      "description": "Select your account age/activity level to auto-set safe daily follow limits",
+      "enum": ["brand_new", "new", "mature", "aged"],
+      "enumTitles": [
+        "Brand New Account (5-10/day - First 2 weeks)",
+        "New Account (10-15/day - First 3 months)",
+        "Mature Account (15-25/day - 3+ months old)",
+        "Aged Account (25-50/day - 1+ years old)"
+      ],
+      "default": "mature"
     },
     "maxFollowsPerRun": {
       "title": "Max Follows Per Run",
       "type": "integer",
-      "description": "Maximum number of accounts to follow in this run (recommended: 10-40 depending on account age)",
-      "default": 20,
+      "description": "⚠️ IMPORTANT: Never exceed 50 follows in one run. Recommended: 5-10 (brand new), 10-15 (new), 15-25 (mature), 25-50 (aged)",
+      "default": 15,
       "minimum": 1,
-      "maximum": 100
+      "maximum": 50
     },
     "delayBetweenFollows": {
       "title": "Delay Between Follows (seconds)",
       "type": "integer",
-      "description": "Time to wait between each follow action (recommended: 30-60 seconds)",
+      "description": "⚠️ Minimum 30s recommended (brand new accounts: 60-90s). Time to wait between follows to avoid detection",
       "default": 45,
-      "minimum": 10,
+      "minimum": 20,
       "maximum": 300
     },
     "randomDelayVariation": {
-      "title": "Random Delay Variation (seconds)",
+      "title": "Random Delay Variation (±seconds)",
       "type": "integer",
-      "description": "Random variation added to delay (±seconds) to make activity look more human",
-      "default": 15,
-      "minimum": 0,
+      "description": "Random variation to make activity look human. Recommended: 15-30 seconds",
+      "default": 20,
+      "minimum": 5,
       "maximum": 60
-    },
-    "accountType": {
-      "title": "Account Type",
-      "type": "string",
-      "description": "Type of your Instagram account (affects daily limits)",
-      "enum": ["new", "mature"],
-      "enumTitles": ["New/High Activity (10-20/day)", "Mature Account (20-40/day)"],
-      "default": "mature"
     },
     "useCleanedInput": {
       "title": "Use Cleaned Input from Previous Run",
       "type": "boolean",
-      "description": "If enabled, automatically uses the cleaned input from the previous run (removes already followed accounts). Make sure to run at least once first!",
+      "description": "If enabled, automatically uses the cleaned input from the previous run (removes already followed accounts)",
       "default": false
     },
     "scrapFromProfile": {
       "title": "Scrape Followers from Profile (Optional)",
       "type": "string",
-      "description": "Instagram username to scrape followers from (e.g., 'instagram'). Leave empty to skip. The actor will follow followers from this profile.",
+      "description": "Instagram username to scrape followers from (e.g., 'instagram'). Leave empty to skip.",
       "editor": "textfield"
     },
     "scrapFromPost": {
       "title": "Scrape Likers from Post (Optional)",
       "type": "string",
-      "description": "Instagram post URL to scrape likers from (e.g., 'https://www.instagram.com/p/ABC123/'). Leave empty to skip. The actor will follow accounts that liked this post.",
+      "description": "Instagram post URL to scrape likers from (e.g., 'https://www.instagram.com/p/ABC123/'). Leave empty to skip.",
       "editor": "textfield"
     },
     "maxScrapesToFollow": {
       "title": "Max Accounts to Scrape",
       "type": "integer",
-      "description": "Maximum number of followers/likers to scrape and follow (used only if scraping is enabled)",
-      "default": 50,
+      "description": "Maximum number of followers/likers to scrape and auto-follow (from profiles/posts)",
+      "default": 200,
       "minimum": 1,
       "maximum": 500
+    },
+    "usersToFollow": {
+      "title": "Users to Follow (Manual List)",
+      "type": "array",
+      "description": "List of Instagram usernames to follow manually. Add as many as you want; the actor will process them in batches based on Max Follows Per Run setting.",
+      "editor": "stringList"
     }
   },
   "required": ["sessionCookie"]

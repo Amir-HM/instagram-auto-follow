@@ -36,48 +36,66 @@ Automatically follow Instagram accounts with smart pacing to avoid action blocks
 
 ⚠️ **Important**: Keep your session cookie private! It gives full access to your Instagram account.
 
-## Recommended Settings
+## Recommended Settings (Safety First!)
 
-### New or High-Activity Accounts
-- **Max follows per day**: 10-20
+### Brand New Accounts (First 2 weeks)
+- **Max follows per run**: 5-10
+- **Delay between follows**: 60-90 seconds
+- **Daily limit**: 5-10 follows/day (spread across multiple runs)
+
+### New Accounts (First 3 months)
+- **Max follows per run**: 10-15
 - **Delay between follows**: 45-60 seconds
+- **Daily limit**: 10-15 follows/day (spread across 1-2 runs)
 
-### Mature Accounts
-- **Max follows per day**: 20-40
+### Mature Accounts (3+ months old)
+- **Max follows per run**: 15-25
 - **Delay between follows**: 30-45 seconds
+- **Daily limit**: 15-25 follows/day (spread across 1-2 runs)
+
+### Aged Accounts (1+ years old)
+- **Max follows per run**: 25-50
+- **Delay between follows**: 20-30 seconds
+- **Daily limit**: 25-50 follows/day (spread across 1-3 runs)
 
 ## Input Parameters
 
-- **sessionCookie** (required): Your Instagram session cookie (sessionid value from browser cookies)
-- **usersToFollow** (required): Array of Instagram usernames to follow
-- **maxFollowsPerRun** (optional, default: 20): Maximum number of accounts to follow in this run
-- **delayBetweenFollows** (optional, default: 45): Time to wait between each follow action in seconds
-- **randomDelayVariation** (optional, default: 15): Random variation added to delays (±seconds)
-- **accountType** (optional, default: mature): Either "new" (10-20/day) or "mature" (20-40/day)
-- **useCleanedInput** (optional, default: false): Auto-uses cleaned input from previous run to skip already followed accounts
+- **sessionCookie** (required, secret): Your Instagram session cookie (sessionid value from browser cookies)
+- **accountType** (optional, default: mature): Account age/activity level — auto-sets safe daily follow limits
+- **maxFollowsPerRun** (optional, default: 15): Maximum accounts to follow in this run (max 50, never exceed!)
+- **delayBetweenFollows** (optional, default: 45): Time to wait between each follow in seconds (min 20s)
+- **randomDelayVariation** (optional, default: 20): Random variation (±seconds) to mimic human behavior
+- **useCleanedInput** (optional, default: false): Auto-uses cleaned input from previous run (removes already followed)
+- **scrapFromProfile** (optional): Instagram username to scrape followers from and auto-follow
+- **scrapFromPost** (optional): Instagram post URL to scrape likers from and auto-follow
+- **maxScrapesToFollow** (optional, default: 200): Max followers/likers to scrape (1-500)
+- **usersToFollow** (optional): Manual list of usernames to follow (processed in batches)
 
 ## Quick Start
 
 1. **Get your session cookie** (see instructions above)
-2. **Input your data**:
+2. **Select your account type** to auto-set safe limits
+3. **Input your data**:
    - Paste your session cookie
-   - Add Instagram usernames to follow
-   - Adjust delays if needed (default is safe)
-3. **Run the actor** and monitor the logs
-4. **Check results** in the dataset
+   - Add Instagram usernames to follow (optional)
+   - OR use scraping to auto-generate follow list
+4. **Run the actor** and monitor the logs
+5. **Check results** in the dataset
 
 ## Batch Processing
 
-Want to follow 500 accounts but only do 20 at a time? Here's the easy way:
+Want to follow 500 accounts safely? Here's the recommended approach:
 
 1. **First Run**: 
    - Paste all 500 usernames in the input
-   - Run the actor (will process first 20)
+   - Set maxFollowsPerRun to 10-15 (depends on account age)
+   - Run the actor (processes first batch)
    
 2. **Subsequent Runs**:
    - Check the "Use Cleaned Input from Previous Run" option ✓
-   - Run again (will automatically process the next 20 from remaining 480)
-   - Repeat until done!
+   - Run again (automatically processes next batch from remaining accounts)
+   - Repeat until all 500 are processed
+   - Spread runs across multiple days to stay safe!
 
 The actor automatically tracks which accounts have been followed and removes them from future runs.
 
