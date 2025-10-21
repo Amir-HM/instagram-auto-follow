@@ -1,0 +1,43 @@
+{
+  "title": "Follow Results",
+  "type": "object",
+  "properties": {
+    "username": {
+      "title": "Username",
+      "type": "string",
+      "description": "Instagram username that was followed"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string",
+      "description": "Result status: 'followed', 'already_following', or 'failed'",
+      "enum": ["followed", "already_following", "failed"]
+    },
+    "success": {
+      "title": "Success",
+      "type": "boolean",
+      "description": "Boolean flag indicating if the follow was successful"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": ["string", "null"],
+      "description": "Explanation if action failed or was skipped"
+    },
+    "timestamp": {
+      "title": "Timestamp",
+      "type": "string",
+      "description": "ISO timestamp of when the action was performed"
+    },
+    "runDate": {
+      "title": "Run Date",
+      "type": "string",
+      "description": "ISO timestamp of the entire run"
+    },
+    "accountType": {
+      "title": "Account Type",
+      "type": "string",
+      "description": "Account type used in this run"
+    }
+  },
+  "required": ["username", "status"]
+}

@@ -1,0 +1,12 @@
+{
+  "sessionCookie": "your_session_id_here",
+  "usersToFollow": ["user1", "user2", "user3"],
+  "scrapFromProfile": "instagram",
+  "scrapFromPost": "https://www.instagram.com/p/ABC123/",
+  "maxScrapesToFollow": 50,
+  "maxFollowsPerRun": 20,
+  "delayBetweenFollows": 45,
+  "randomDelayVariation": 15,
+  "accountType": "mature",
+  "useCleanedInput": false
+}

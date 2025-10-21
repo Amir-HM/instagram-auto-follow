@@ -1,0 +1,24 @@
+{
+  "actorSpecVersion": 1,
+  "name": "instagram-auto-follow",
+  "title": "Instagram Auto Follow",
+  "description": "Automatically follow Instagram accounts with smart pacing to avoid action blocks",
+  "version": "1.0.0",
+  "docUrl": "https://apify.com/amir-hm/instagram-auto-follow",
+  "dockerfile": ".actor/Dockerfile",
+  "storages": {
+    "dataset": {
+      "views": {
+        "overview": {
+          "title": "Follow Results Overview",
+          "transformation": {
+            "fields": ["username", "status", "reason"]
+          }
+        }
+      }
+    }
+  },
+  "meta": {
+    "templateId": "instagram_auto_follow"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "title": "Instagram Auto Follow Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "sessionCookie": {
+      "title": "Instagram Session Cookie (sessionid)",
+      "type": "string",
+      "description": "Your Instagram session cookie (sessionid). Get it from browser DevTools > Application > Cookies > instagram.com > sessionid",
+      "editor": "textarea",
+      "isSecret": true
+    },
+    "usersToFollow": {
+      "title": "Users to Follow",
+      "type": "array",
+      "description": "List of Instagram usernames to follow",
+      "editor": "stringList",
+      "placeholderValue": "username1, username2, username3"
+    },
+    "maxFollowsPerRun": {
+      "title": "Max Follows Per Run",
+      "type": "integer",
+      "description": "Maximum number of accounts to follow in this run (recommended: 10-40 depending on account age)",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 100
+    },
+    "delayBetweenFollows": {
+      "title": "Delay Between Follows (seconds)",
+      "type": "integer",
+      "description": "Time to wait between each follow action (recommended: 30-60 seconds)",
+      "default": 45,
+      "minimum": 10,
+      "maximum": 300
+    },
+    "randomDelayVariation": {
+      "title": "Random Delay Variation (seconds)",
+      "type": "integer",
+      "description": "Random variation added to delay (±seconds) to make activity look more human",
+      "default": 15,
+      "minimum": 0,
+      "maximum": 60
+    },
+    "accountType": {
+      "title": "Account Type",
+      "type": "string",
+      "description": "Type of your Instagram account (affects daily limits)",
+      "enum": ["new", "mature"],
+      "enumTitles": ["New/High Activity (10-20/day)", "Mature Account (20-40/day)"],
+      "default": "mature"
+    },
+    "useCleanedInput": {
+      "title": "Use Cleaned Input from Previous Run",
+      "type": "boolean",
+      "description": "If enabled, automatically uses the cleaned input from the previous run (removes already followed accounts). Make sure to run at least once first!",
+      "default": false
+    },
+    "scrapFromProfile": {
+      "title": "Scrape Followers from Profile (Optional)",
+      "type": "string",
+      "description": "Instagram username to scrape followers from (e.g., 'instagram'). Leave empty to skip. The actor will follow followers from this profile.",
+      "placeholderValue": "username"
+    },
+    "scrapFromPost": {
+      "title": "Scrape Likers from Post (Optional)",
+      "type": "string",
+      "description": "Instagram post URL to scrape likers from (e.g., 'https://www.instagram.com/p/ABC123/'). Leave empty to skip. The actor will follow accounts that liked this post.",
+      "placeholderValue": "https://www.instagram.com/p/ABC123/"
+    },
+    "maxScrapesToFollow": {
+      "title": "Max Accounts to Scrape",
+      "type": "integer",
+      "description": "Maximum number of followers/likers to scrape and follow (used only if scraping is enabled)",
+      "default": 50,
+      "minimum": 1,
+      "maximum": 500
+    }
+  },
+  "required": ["sessionCookie"]
+}
