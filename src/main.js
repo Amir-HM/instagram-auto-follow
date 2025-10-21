@@ -108,28 +108,36 @@ try {
         throw new Error('Failed to navigate to profile URL');
       }
 
-      // Wait for page to load
-      await page.waitForTimeout(2000);
+      // Wait longer for Instagram to load all profile content
+      logger.info(`Waiting for profile to fully load...`);
+      await page.waitForTimeout(3000);
+
+      // Additional wait for specific profile elements to be present
+      try {
+        await page.waitForSelector('h2', { timeout: 5000 }).catch(() => null);
+      } catch (e) {
+        logger.warning(`Timeout waiting for profile name`);
+      }
 
       // Check if profile exists - use multiple detection methods
       const profileExists = await page.evaluate(() => {
         // Method 1: Check for profile name header
         const profileHeader = document.querySelector('h2');
-        // Method 2: Check for Instagram home icon (indicates logged in on valid profile)
-        const homeIcon = document.querySelector('svg[aria-label="Home"]');
-        // Method 3: Check for any main content area
+        // Method 2: Check for any main content area
         const mainContent = document.querySelector('main');
-        // Method 4: Check for profile section
+        // Method 3: Check for profile section
         const profileSection = document.querySelector('section');
         
         return !!(profileHeader || mainContent || profileSection);
-      });
+      }).catch(() => false);
 
       if (!profileExists) {
-        throw new Error('Profile not found or is private');
+        logger.warning(`Profile detection failed, but continuing anyway to check for buttons...`);
+      } else {
+        logger.info(`✓ Profile found for ${username}`);
       }
 
-      logger.info(`Profile found for ${username}, looking for action button...`);
+      logger.info(`Looking for action button...`);
 
       // Look for action button - use locator for better resilience
       let actionButton = null;
@@ -141,12 +149,14 @@ try {
         const count = await buttonLocator.count().catch(() => 0);
         
         if (count > 0) {
-          logger.info(`Found action button using text locator for "${actionButtonText}"`);
+          logger.info(`✓ Found action button using text locator for "${actionButtonText}"`);
           actionButton = buttonLocator;
           actionButtonFound = true;
+        } else {
+          logger.info(`✗ Strategy 1 failed - no button found with text "${actionButtonText}"`);
         }
       } catch (e) {
-        logger.warning(`Strategy 1 failed: ${e.message}`);
+        logger.warning(`Strategy 1 error: ${e.message}`);
       }
       
       // Strategy 2: Look for button by aria-label
@@ -156,12 +166,14 @@ try {
           const count = await ariaButtonLocator.count().catch(() => 0);
           
           if (count > 0) {
-            logger.info(`Found action button using aria-label for "${actionButtonText}"`);
+            logger.info(`✓ Found action button using aria-label for "${actionButtonText}"`);
             actionButton = ariaButtonLocator;
             actionButtonFound = true;
+          } else {
+            logger.info(`✗ Strategy 2 failed - no button found with aria-label "${actionButtonText}"`);
           }
         } catch (e) {
-          logger.warning(`Strategy 2 failed: ${e.message}`);
+          logger.warning(`Strategy 2 error: ${e.message}`);
         }
       }
       
@@ -171,17 +183,26 @@ try {
           const allButtons = await page.locator('button').all();
           logger.info(`Found ${allButtons.length} buttons total on page`);
           
-          for (const btn of allButtons) {
-            const text = await btn.textContent().catch(() => '');
-            if (text.trim() === actionButtonText) {
-              logger.info(`Found button with exact text match: "${text.trim()}"`);
-              actionButton = btn;
-              actionButtonFound = true;
-              break;
+          for (let i = 0; i < allButtons.length; i++) {
+            const btn = allButtons[i];
+            try {
+              const text = await btn.textContent().catch(() => '');
+              if (text.trim() === actionButtonText) {
+                logger.info(`✓ Found button at index ${i} with exact text match: "${text.trim()}"`);
+                actionButton = btn;
+                actionButtonFound = true;
+                break;
+              }
+            } catch (e) {
+              // Skip this button
             }
           }
+          
+          if (!actionButtonFound) {
+            logger.info(`✗ Strategy 3 failed - no exact text match for "${actionButtonText}" among ${allButtons.length} buttons`);
+          }
         } catch (e) {
-          logger.warning(`Strategy 3 failed: ${e.message}`);
+          logger.warning(`Strategy 3 error: ${e.message}`);
         }
       }
 
@@ -197,9 +218,11 @@ try {
           const count = await oppositeLocator.count().catch(() => 0);
           
           if (count > 0) {
-            logger.info(`Found opposite button: "${targetButtonText}" - already in desired state`);
+            logger.info(`✓ Found opposite button: "${targetButtonText}" - already in desired state`);
             oppositeButton = oppositeLocator;
             oppositeButtonFound = true;
+          } else {
+            logger.info(`✗ Opposite button not found either`);
           }
         } catch (e) {
           logger.warning(`Could not find opposite button: ${e.message}`);
@@ -230,12 +253,12 @@ try {
           throw new Error('Action button not found on profile');
         }
       } else {
-        logger.info(`Found action button for ${username}, clicking...`);
+        logger.info(`Clicking action button for ${username}...`);
         
         try {
           // Click action button
           await actionButton.click();
-          await page.waitForTimeout(1500);
+          await page.waitForTimeout(2000);
 
           // Verify action was successful by checking for the opposite button
           let confirmButton = null;
@@ -248,6 +271,8 @@ try {
             if (count > 0) {
               confirmButton = confirmLocator;
               confirmFound = true;
+            } else {
+              logger.warning(`Could not verify action - opposite button not found after click`);
             }
           } catch (e) {
             logger.warning(`Could not verify action completion: ${e.message}`);
@@ -255,7 +280,7 @@ try {
           
           if (confirmFound) {
             const successStatus = action === 'follow' ? 'followed' : 'unfollowed';
-            logger.info(`${username}: Successfully ${actionName}`);
+            logger.info(`✓ ${username}: Successfully ${actionName}`);
             results.push({
               username,
               status: successStatus,
