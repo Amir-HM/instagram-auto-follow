@@ -320,43 +320,87 @@ async function scrapeProfileFollowers(profileUsername, sessionCookie, maxToScrap
     });
     await page.waitForTimeout(2000);
 
-    // Click followers count to open followers modal
-    const followersLink = await page.$('a[href*="followers"]');
-    if (followersLink) {
-      await followersLink.click();
-      await page.waitForTimeout(1000);
+    // Log page content for debugging
+    const pageTitle = await page.title();
+    console.log(`[SCRAPE DEBUG] Loaded page with title: ${pageTitle}`);
 
-      // Scroll through followers list and collect usernames
-      const followersList = await page.$('[role="dialog"]');
-      if (followersList) {
-        let previousHeight = 0;
-        let currentHeight = 0;
+    // Check if page loaded correctly
+    const profileCheck = await page.evaluate(() => {
+      return {
+        hasH2: !!document.querySelector('h2'),
+        bodyText: document.body.innerText.substring(0, 200)
+      };
+    });
+    console.log(`[SCRAPE DEBUG] Profile check: ${JSON.stringify(profileCheck)}`);
 
-        while (followers.length < maxToScrape) {
-          currentHeight = await page.evaluate(() => {
-            const listContainer = document.querySelector('[role="dialog"] div');
-            return listContainer ? listContainer.scrollHeight : 0;
-          });
+    // Try multiple selectors for followers link
+    const followersSelectors = [
+      'a[href*="followers"]',
+      'a:has-text("followers")',
+      'button:has-text("followers")',
+      'span:has-text("follower")',
+    ];
 
-          if (currentHeight === previousHeight) break;
-
-          await page.evaluate(() => {
-            const listContainer = document.querySelector('[role="dialog"] div');
-            if (listContainer) listContainer.scrollTop = listContainer.scrollHeight;
-          });
-
-          await page.waitForTimeout(500);
-          previousHeight = currentHeight;
+    let followersFound = false;
+    for (const selector of followersSelectors) {
+      try {
+        const element = await page.$(selector).catch(() => null);
+        if (element) {
+          console.log(`[SCRAPE DEBUG] Found followers element with selector: ${selector}`);
+          await element.click();
+          followersFound = true;
+          await page.waitForTimeout(1500);
+          break;
         }
+      } catch (e) {
+        // Continue to next selector
+      }
+    }
 
-        // Extract usernames
-        const usernames = await page.evaluate(() => {
-          const links = Array.from(document.querySelectorAll('[role="dialog"] a[title]'));
-          return links.map(link => link.textContent.trim()).filter(name => name && name.length > 0);
+    if (!followersFound) {
+      console.warn(`[SCRAPE DEBUG] Could not find followers link with any selector`);
+      return followers;
+    }
+
+    // Scroll through followers list and collect usernames
+    const followersList = await page.$('[role="dialog"]');
+    if (followersList) {
+      let previousHeight = 0;
+      let currentHeight = 0;
+      let iterations = 0;
+      const maxIterations = 20;
+
+      while (followers.length < maxToScrape && iterations < maxIterations) {
+        currentHeight = await page.evaluate(() => {
+          const listContainer = document.querySelector('[role="dialog"] div');
+          return listContainer ? listContainer.scrollHeight : 0;
         });
 
-        followers.push(...usernames.slice(0, maxToScrape));
+        if (currentHeight === previousHeight) {
+          console.log(`[SCRAPE DEBUG] No more followers to scroll (height: ${currentHeight})`);
+          break;
+        }
+
+        await page.evaluate(() => {
+          const listContainer = document.querySelector('[role="dialog"] div');
+          if (listContainer) listContainer.scrollTop = listContainer.scrollHeight;
+        });
+
+        await page.waitForTimeout(500);
+        previousHeight = currentHeight;
+        iterations++;
       }
+
+      // Extract usernames
+      const usernames = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('[role="dialog"] a[title]'));
+        return links.map(link => link.textContent.trim()).filter(name => name && name.length > 0);
+      });
+
+      console.log(`[SCRAPE DEBUG] Found ${usernames.length} followers`);
+      followers.push(...usernames.slice(0, maxToScrape));
+    } else {
+      console.warn('[SCRAPE DEBUG] Could not find followers dialog');
     }
   } catch (error) {
     console.warn(`Error scraping followers from ${profileUsername}: ${error.message}`);
@@ -395,43 +439,78 @@ async function scrapePostLikers(postUrl, sessionCookie, maxToScrape) {
     });
     await page.waitForTimeout(2000);
 
-    // Click likes count to open likers modal
-    const likesLink = await page.$('a[href*="liked_by"]');
-    if (likesLink) {
-      await likesLink.click();
-      await page.waitForTimeout(1000);
+    // Log page content for debugging
+    const pageTitle = await page.title();
+    console.log(`[SCRAPE DEBUG] Post page loaded with title: ${pageTitle}`);
 
-      // Scroll through likers list and collect usernames
-      const likersList = await page.$('[role="dialog"]');
-      if (likersList) {
-        let previousHeight = 0;
-        let currentHeight = 0;
+    // Try multiple selectors for likes link
+    const likesSelectors = [
+      'a[href*="liked_by"]',
+      'button:has-text("like")',
+      'span:has-text("like")',
+      'a:has-text("like")',
+    ];
 
-        while (likers.length < maxToScrape) {
-          currentHeight = await page.evaluate(() => {
-            const listContainer = document.querySelector('[role="dialog"] div');
-            return listContainer ? listContainer.scrollHeight : 0;
-          });
-
-          if (currentHeight === previousHeight) break;
-
-          await page.evaluate(() => {
-            const listContainer = document.querySelector('[role="dialog"] div');
-            if (listContainer) listContainer.scrollTop = listContainer.scrollHeight;
-          });
-
-          await page.waitForTimeout(500);
-          previousHeight = currentHeight;
+    let likesFound = false;
+    for (const selector of likesSelectors) {
+      try {
+        const element = await page.$(selector).catch(() => null);
+        if (element) {
+          console.log(`[SCRAPE DEBUG] Found likes element with selector: ${selector}`);
+          await element.click();
+          likesFound = true;
+          await page.waitForTimeout(1500);
+          break;
         }
+      } catch (e) {
+        // Continue to next selector
+      }
+    }
 
-        // Extract usernames
-        const usernames = await page.evaluate(() => {
-          const links = Array.from(document.querySelectorAll('[role="dialog"] a[title]'));
-          return links.map(link => link.textContent.trim()).filter(name => name && name.length > 0);
+    if (!likesFound) {
+      console.warn(`[SCRAPE DEBUG] Could not find likes link with any selector`);
+      return likers;
+    }
+
+    // Scroll through likers list and collect usernames
+    const likersList = await page.$('[role="dialog"]');
+    if (likersList) {
+      let previousHeight = 0;
+      let currentHeight = 0;
+      let iterations = 0;
+      const maxIterations = 20;
+
+      while (likers.length < maxToScrape && iterations < maxIterations) {
+        currentHeight = await page.evaluate(() => {
+          const listContainer = document.querySelector('[role="dialog"] div');
+          return listContainer ? listContainer.scrollHeight : 0;
         });
 
-        likers.push(...usernames.slice(0, maxToScrape));
+        if (currentHeight === previousHeight) {
+          console.log(`[SCRAPE DEBUG] No more likers to scroll (height: ${currentHeight})`);
+          break;
+        }
+
+        await page.evaluate(() => {
+          const listContainer = document.querySelector('[role="dialog"] div');
+          if (listContainer) listContainer.scrollTop = listContainer.scrollHeight;
+        });
+
+        await page.waitForTimeout(500);
+        previousHeight = currentHeight;
+        iterations++;
       }
+
+      // Extract usernames
+      const usernames = await page.evaluate(() => {
+        const links = Array.from(document.querySelectorAll('[role="dialog"] a[title]'));
+        return links.map(link => link.textContent.trim()).filter(name => name && name.length > 0);
+      });
+
+      console.log(`[SCRAPE DEBUG] Found ${usernames.length} likers`);
+      likers.push(...usernames.slice(0, maxToScrape));
+    } else {
+      console.warn('[SCRAPE DEBUG] Could not find likers dialog');
     }
   } catch (error) {
     console.warn(`Error scraping likers from post: ${error.message}`);
