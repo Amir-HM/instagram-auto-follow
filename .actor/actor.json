@@ -7,9 +7,6 @@
   "version": "1.0",
   "docUrl": "https://apify.com/amir-hm/instagram-auto-follow",
   "dockerfile": ".actor/Dockerfile",
-  "storages": {
-    "dataset": "default"
-  },
   "meta": {
     "templateId": "instagram_auto_follow"
   }
