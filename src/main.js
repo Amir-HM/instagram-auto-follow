@@ -102,20 +102,27 @@ try {
       // Navigate to user profile
       const profileUrl = `https://www.instagram.com/${username}/`;
       logger.info(`Navigating to: ${profileUrl}`);
-      await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {
+      try {
+        await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      } catch (error) {
         throw new Error('Failed to navigate to profile URL');
-      });
+      }
 
       // Wait for page to load
       await page.waitForTimeout(2000);
 
-      // Check if profile exists - look for username in header or profile info
+      // Check if profile exists - use multiple detection methods
       const profileExists = await page.evaluate(() => {
-        // Check for various profile indicators
-        const header = document.querySelector('header');
-        const profileName = document.querySelector('h2');
-        const profileInfo = document.querySelector('[class*="ProfileInfoSection"]');
-        return !!(header || profileName || profileInfo);
+        // Method 1: Check for profile name header
+        const profileHeader = document.querySelector('h2');
+        // Method 2: Check for Instagram home icon (indicates logged in on valid profile)
+        const homeIcon = document.querySelector('svg[aria-label="Home"]');
+        // Method 3: Check for any main content area
+        const mainContent = document.querySelector('main');
+        // Method 4: Check for profile section
+        const profileSection = document.querySelector('section');
+        
+        return !!(profileHeader || mainContent || profileSection);
       });
 
       if (!profileExists) {
@@ -124,35 +131,81 @@ try {
 
       logger.info(`Profile found for ${username}, looking for action button...`);
 
-      // Look for action button with multiple selector strategies
+      // Look for action button - use locator for better resilience
       let actionButton = null;
+      let actionButtonFound = false;
       
-      // Strategy 1: Direct text match with has-text
-      actionButton = await page.$(`button:has-text("${actionButtonText}")`).catch(() => null);
+      try {
+        // Strategy 1: Try to find button with locator using text
+        const buttonLocator = page.locator(`button:has-text("${actionButtonText}"), button:has-text("${actionButtonText.toLowerCase()}")`).first();
+        const count = await buttonLocator.count().catch(() => 0);
+        
+        if (count > 0) {
+          logger.info(`Found action button using text locator for "${actionButtonText}"`);
+          actionButton = buttonLocator;
+          actionButtonFound = true;
+        }
+      } catch (e) {
+        logger.warning(`Strategy 1 failed: ${e.message}`);
+      }
       
       // Strategy 2: Look for button by aria-label
-      if (!actionButton) {
-        const ariaLabel = action === 'follow' ? 'Follow' : 'Following';
-        actionButton = await page.$(`button[aria-label*="${ariaLabel}"]`).catch(() => null);
+      if (!actionButtonFound) {
+        try {
+          const ariaButtonLocator = page.locator(`button[aria-label*="${actionButtonText}"]`).first();
+          const count = await ariaButtonLocator.count().catch(() => 0);
+          
+          if (count > 0) {
+            logger.info(`Found action button using aria-label for "${actionButtonText}"`);
+            actionButton = ariaButtonLocator;
+            actionButtonFound = true;
+          }
+        } catch (e) {
+          logger.warning(`Strategy 2 failed: ${e.message}`);
+        }
       }
       
-      // Strategy 3: Search all buttons for text content
-      if (!actionButton) {
-        actionButton = await page.evaluate((buttonText) => {
-          const buttons = Array.from(document.querySelectorAll('button'));
-          return buttons.find(btn => btn.textContent.trim() === buttonText) || null;
-        }, actionButtonText).then(el => el ? page.$(`.button-like-element`) : null).catch(() => null);
+      // Strategy 3: Search all buttons for text match
+      if (!actionButtonFound) {
+        try {
+          const allButtons = await page.locator('button').all();
+          logger.info(`Found ${allButtons.length} buttons total on page`);
+          
+          for (const btn of allButtons) {
+            const text = await btn.textContent().catch(() => '');
+            if (text.trim() === actionButtonText) {
+              logger.info(`Found button with exact text match: "${text.trim()}"`);
+              actionButton = btn;
+              actionButtonFound = true;
+              break;
+            }
+          }
+        } catch (e) {
+          logger.warning(`Strategy 3 failed: ${e.message}`);
+        }
       }
 
-      if (!actionButton) {
-        // Check for the opposite state (already in desired state)
-        let oppositeButton = await page.$(`button:has-text("${targetButtonText}")`).catch(() => null);
+      if (!actionButtonFound) {
+        logger.info(`Action button "${actionButtonText}" not found, checking for opposite state...`);
         
-        if (!oppositeButton) {
-          oppositeButton = await page.$(`button[aria-label*="${action === 'follow' ? 'Following' : 'Follow'}"]`).catch(() => null);
+        // Check for the opposite state (already in desired state)
+        let oppositeButton = null;
+        let oppositeButtonFound = false;
+        
+        try {
+          const oppositeLocator = page.locator(`button:has-text("${targetButtonText}")`).first();
+          const count = await oppositeLocator.count().catch(() => 0);
+          
+          if (count > 0) {
+            logger.info(`Found opposite button: "${targetButtonText}" - already in desired state`);
+            oppositeButton = oppositeLocator;
+            oppositeButtonFound = true;
+          }
+        } catch (e) {
+          logger.warning(`Could not find opposite button: ${e.message}`);
         }
         
-        if (oppositeButton) {
+        if (oppositeButtonFound) {
           const statusText = action === 'follow' ? 'Already following' : 'Not following';
           logger.info(`${username}: ${statusText}`);
           results.push({
@@ -166,40 +219,63 @@ try {
           });
           alreadyFollowingCount++;
         } else {
+          // Take screenshot for debugging
+          try {
+            const debugPath = `debug-${username}-${Date.now()}.png`;
+            await page.screenshot({ path: debugPath });
+            logger.info(`Saved debug screenshot to ${debugPath}`);
+          } catch (e) {
+            logger.warning(`Could not save screenshot: ${e.message}`);
+          }
           throw new Error('Action button not found on profile');
         }
       } else {
         logger.info(`Found action button for ${username}, clicking...`);
-        // Click action button
-        await actionButton.click();
-        await page.waitForTimeout(1500);
+        
+        try {
+          // Click action button
+          await actionButton.click();
+          await page.waitForTimeout(1500);
 
-        // Verify action was successful by checking for the opposite button
-        let confirmButton = await page.$(`button:has-text("${targetButtonText}")`).catch(() => null);
-        
-        if (!confirmButton) {
-          confirmButton = await page.$(`button[aria-label*="${action === 'follow' ? 'Following' : 'Follow'}"]`).catch(() => null);
-        }
-        
-        if (confirmButton) {
-          const successStatus = action === 'follow' ? 'followed' : 'unfollowed';
-          logger.info(`${username}: Successfully ${actionName}`);
-          results.push({
-            username,
-            status: successStatus,
-            success: true,
-            reason: `Successfully ${actionName}`,
-            timestamp: new Date().toISOString(),
-            runDate: new Date().toISOString(),
-            accountType,
-          });
-          if (action === 'follow') {
-            followCount++;
-          } else {
-            unfollowCount++;
+          // Verify action was successful by checking for the opposite button
+          let confirmButton = null;
+          let confirmFound = false;
+          
+          try {
+            const confirmLocator = page.locator(`button:has-text("${targetButtonText}")`).first();
+            const count = await confirmLocator.count().catch(() => 0);
+            
+            if (count > 0) {
+              confirmButton = confirmLocator;
+              confirmFound = true;
+            }
+          } catch (e) {
+            logger.warning(`Could not verify action completion: ${e.message}`);
           }
-        } else {
-          throw new Error(`${action} action did not complete`);
+          
+          if (confirmFound) {
+            const successStatus = action === 'follow' ? 'followed' : 'unfollowed';
+            logger.info(`${username}: Successfully ${actionName}`);
+            results.push({
+              username,
+              status: successStatus,
+              success: true,
+              reason: `Successfully ${actionName}`,
+              timestamp: new Date().toISOString(),
+              runDate: new Date().toISOString(),
+              accountType,
+            });
+            if (action === 'follow') {
+              followCount++;
+            } else {
+              unfollowCount++;
+            }
+          } else {
+            throw new Error(`${action} action did not complete - verification button not found`);
+          }
+        } catch (clickError) {
+          logger.error(`Error clicking action button: ${clickError.message}`);
+          throw clickError;
         }
       }
 
