@@ -1,5 +1,6 @@
 {
   "actorSpecVersion": 1,
+  "actorSpecification": 1,
   "name": "instagram-auto-follow",
   "title": "Instagram Auto Follow",
   "description": "Automatically follow Instagram accounts with smart pacing to avoid action blocks",
