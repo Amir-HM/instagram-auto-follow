@@ -5,8 +5,14 @@ import { chromium } from 'playwright';
 await Actor.init();
 
 try {
-  // Get input
-  const input = await Actor.getInput() || {};
+  // Get input - with fallback for local testing
+  let input = await Actor.getInput() || {};
+  
+  // For local testing, allow input from environment variables
+  if (Object.keys(input).length === 0 && process.env.APIFY_TEST_INPUT) {
+    input = JSON.parse(process.env.APIFY_TEST_INPUT);
+  }
+  
   const {
     sessionCookie,
     usersToFollow = [],
@@ -92,7 +98,7 @@ try {
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
-  const context = await browser.createBrowserContext();
+  const context = await browser.newContext();
   const page = await context.newPage();
 
   // Set session cookie
@@ -284,7 +290,7 @@ try {
  */
 async function scrapeProfileFollowers(profileUsername, sessionCookie, maxToScrape) {
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.createBrowserContext();
+  const context = await browser.newContext();
   const page = await context.newPage();
 
   const followers = [];
@@ -358,7 +364,7 @@ async function scrapeProfileFollowers(profileUsername, sessionCookie, maxToScrap
  */
 async function scrapePostLikers(postUrl, sessionCookie, maxToScrape) {
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.createBrowserContext();
+  const context = await browser.newContext();
   const page = await context.newPage();
 
   const likers = [];

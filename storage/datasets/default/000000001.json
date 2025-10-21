@@ -1,0 +1,9 @@
+{
+	"username": "instagram",
+	"status": "failed",
+	"success": false,
+	"reason": "Follow button not found",
+	"timestamp": "2025-10-21T18:39:24.617Z",
+	"runDate": "2025-10-21T18:39:24.623Z",
+	"accountType": "new"
+}
