@@ -308,7 +308,9 @@ async function scrapeProfileFollowers(profileUsername, sessionCookie, maxToScrap
       },
     ]);
 
-    const profileUrl = `https://www.instagram.com/${profileUsername}/`;
+    const profileUrl = profileUsername.startsWith('http') 
+      ? profileUsername 
+      : `https://www.instagram.com/${profileUsername}/`;
     await page.goto(profileUrl, { waitUntil: 'networkidle' });
     await page.waitForTimeout(2000);
 
