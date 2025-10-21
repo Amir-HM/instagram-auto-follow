@@ -1,9 +1,12 @@
-const Apify = require('apify');
-const { chromium } = require('playwright');
+import { Actor } from 'apify';
+import { chromium } from 'playwright';
 
-Apify.main(async () => {
+// Initialize the actor on the Apify platform
+await Actor.init();
+
+try {
   // Get input
-  const input = await Apify.getInput() || {};
+  const input = await Actor.getInput() || {};
   const {
     sessionCookie,
     usersToFollow = [],
@@ -34,8 +37,8 @@ Apify.main(async () => {
   logger.info(`Delay between follows: ${delayBetweenFollows}s (±${randomDelayVariation}s)`);
 
   // Initialize storage
-  const dataset = await Apify.openDataset();
-  const kvStore = await Apify.openKeyValueStore();
+  const dataset = await Actor.openDataset();
+  const kvStore = await Actor.openKeyValueStore();
 
   // Load cleaned input if requested
   let targetUsers = [...usersToFollow];
@@ -268,7 +271,13 @@ Apify.main(async () => {
   logger.info(JSON.stringify(remainingUsers));
 
   logger.info('Instagram Auto Follow Actor finished');
-});
+
+  // Exit the actor
+  await Actor.exit();
+} catch (error) {
+  console.error('Fatal error:', error);
+  await Actor.exit();
+}
 
 /**
  * Scrape followers from a public Instagram profile

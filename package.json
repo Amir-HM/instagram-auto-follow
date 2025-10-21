@@ -1,6 +1,7 @@
 {
   "name": "instagram-auto-follow",
   "version": "1.0.0",
+  "type": "module",
   "description": "Apify actor for automatically following Instagram accounts with advanced scraping capabilities",
   "author": "Amir-HM",
   "license": "MIT",
