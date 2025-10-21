@@ -116,8 +116,12 @@ try {
 
   logger.info('Session cookie set');
 
-  // Navigate to Instagram
-  await page.goto('https://www.instagram.com', { waitUntil: 'networkidle' });
+  // Navigate to Instagram with lenient timeout
+  try {
+    await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded', timeout: 15000 });
+  } catch (e) {
+    logger.warning('Instagram home page load timeout, continuing anyway...');
+  }
 
   let followCount = 0;
   let alreadyFollowingCount = 0;
@@ -311,7 +315,9 @@ async function scrapeProfileFollowers(profileUsername, sessionCookie, maxToScrap
     const profileUrl = profileUsername.startsWith('http') 
       ? profileUsername 
       : `https://www.instagram.com/${profileUsername}/`;
-    await page.goto(profileUrl, { waitUntil: 'networkidle' });
+    await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {
+      console.warn('Profile page load timeout or error, continuing anyway...');
+    });
     await page.waitForTimeout(2000);
 
     // Click followers count to open followers modal
@@ -384,7 +390,9 @@ async function scrapePostLikers(postUrl, sessionCookie, maxToScrape) {
       },
     ]);
 
-    await page.goto(postUrl, { waitUntil: 'networkidle' });
+    await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {
+      console.warn('Post page load timeout or error, continuing anyway...');
+    });
     await page.waitForTimeout(2000);
 
     // Click likes count to open likers modal
