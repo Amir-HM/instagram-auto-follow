@@ -1,0 +1,31 @@
+{
+  "name": "instagram-auto-follow",
+  "version": "1.0.0",
+  "description": "Apify actor for automatically following Instagram accounts with advanced scraping capabilities",
+  "author": "Amir-HM",
+  "license": "MIT",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "lint": "eslint . --ext .js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "apify",
+    "actor",
+    "instagram",
+    "automation",
+    "follow",
+    "scraping"
+  ],
+  "dependencies": {
+    "apify": "^3.1.0",
+    "playwright": "^1.40.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.54.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
