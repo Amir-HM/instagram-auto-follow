@@ -1,7 +1,7 @@
 const Apify = require('apify');
 const { chromium } = require('playwright');
 
-(async () => {
+Apify.main(async () => {
   // Get input
   const input = await Apify.getInput() || {};
   const {
@@ -268,9 +268,6 @@ const { chromium } = require('playwright');
   logger.info(JSON.stringify(remainingUsers));
 
   logger.info('Instagram Auto Follow Actor finished');
-})().catch(error => {
-  console.error('Fatal error:', error);
-  process.exit(1);
 });
 
 /**
