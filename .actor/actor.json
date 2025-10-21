@@ -8,16 +8,7 @@
   "docUrl": "https://apify.com/amir-hm/instagram-auto-follow",
   "dockerfile": ".actor/Dockerfile",
   "storages": {
-    "dataset": {
-      "views": {
-        "overview": {
-          "title": "Follow Results Overview",
-          "transformation": {
-            "fields": ["username", "status", "reason"]
-          }
-        }
-      }
-    }
+    "dataset": "default"
   },
   "meta": {
     "templateId": "instagram_auto_follow"
