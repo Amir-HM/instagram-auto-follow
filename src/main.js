@@ -101,30 +101,60 @@ try {
 
       // Navigate to user profile
       const profileUrl = `https://www.instagram.com/${username}/`;
+      logger.info(`Navigating to: ${profileUrl}`);
       await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {
-        throw new Error('Profile not found');
+        throw new Error('Failed to navigate to profile URL');
       });
 
       // Wait for page to load
       await page.waitForTimeout(2000);
 
-      // Check if profile exists and is not private
+      // Check if profile exists - look for username in header or profile info
       const profileExists = await page.evaluate(() => {
-        return document.querySelector('h2') !== null;
+        // Check for various profile indicators
+        const header = document.querySelector('header');
+        const profileName = document.querySelector('h2');
+        const profileInfo = document.querySelector('[class*="ProfileInfoSection"]');
+        return !!(header || profileName || profileInfo);
       });
 
       if (!profileExists) {
         throw new Error('Profile not found or is private');
       }
 
-      // Look for action button (Follow or Following)
-      const actionButton = await page.$(`button:has-text("${actionButtonText}")`);
+      logger.info(`Profile found for ${username}, looking for action button...`);
+
+      // Look for action button with multiple selector strategies
+      let actionButton = null;
+      
+      // Strategy 1: Direct text match with has-text
+      actionButton = await page.$(`button:has-text("${actionButtonText}")`).catch(() => null);
+      
+      // Strategy 2: Look for button by aria-label
+      if (!actionButton) {
+        const ariaLabel = action === 'follow' ? 'Follow' : 'Following';
+        actionButton = await page.$(`button[aria-label*="${ariaLabel}"]`).catch(() => null);
+      }
+      
+      // Strategy 3: Search all buttons for text content
+      if (!actionButton) {
+        actionButton = await page.evaluate((buttonText) => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          return buttons.find(btn => btn.textContent.trim() === buttonText) || null;
+        }, actionButtonText).then(el => el ? page.$(`.button-like-element`) : null).catch(() => null);
+      }
 
       if (!actionButton) {
-        // Check for the opposite state
-        const oppositeButton = await page.$(`button:has-text("${targetButtonText}")`);
+        // Check for the opposite state (already in desired state)
+        let oppositeButton = await page.$(`button:has-text("${targetButtonText}")`).catch(() => null);
+        
+        if (!oppositeButton) {
+          oppositeButton = await page.$(`button[aria-label*="${action === 'follow' ? 'Following' : 'Follow'}"]`).catch(() => null);
+        }
+        
         if (oppositeButton) {
           const statusText = action === 'follow' ? 'Already following' : 'Not following';
+          logger.info(`${username}: ${statusText}`);
           results.push({
             username,
             status: action === 'follow' ? 'already_following' : 'not_following',
@@ -135,19 +165,25 @@ try {
             accountType,
           });
           alreadyFollowingCount++;
-          logger.info(`${username}: ${statusText}`);
         } else {
-          throw new Error('Action button not found');
+          throw new Error('Action button not found on profile');
         }
       } else {
+        logger.info(`Found action button for ${username}, clicking...`);
         // Click action button
         await actionButton.click();
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(1500);
 
-        // Verify action was successful
-        const confirmButton = await page.$(`button:has-text("${targetButtonText}")`);
+        // Verify action was successful by checking for the opposite button
+        let confirmButton = await page.$(`button:has-text("${targetButtonText}")`).catch(() => null);
+        
+        if (!confirmButton) {
+          confirmButton = await page.$(`button[aria-label*="${action === 'follow' ? 'Following' : 'Follow'}"]`).catch(() => null);
+        }
+        
         if (confirmButton) {
           const successStatus = action === 'follow' ? 'followed' : 'unfollowed';
+          logger.info(`${username}: Successfully ${actionName}`);
           results.push({
             username,
             status: successStatus,
@@ -162,7 +198,6 @@ try {
           } else {
             unfollowCount++;
           }
-          logger.info(`${username}: Successfully ${actionName}`);
         } else {
           throw new Error(`${action} action did not complete`);
         }
@@ -171,8 +206,13 @@ try {
       // Add delay between actions (with random variation)
       const randomDelay = (Math.random() - 0.5) * 2 * randomDelayVariation;
       const actualDelay = (delayBetweenFollows + randomDelay) * 1000;
-      logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next action`);
-      await page.waitForTimeout(Math.max(actualDelay, 5000)); // Minimum 5s delay
+      
+      if (actualDelay > 0) {
+        logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next action`);
+        await page.waitForTimeout(Math.max(actualDelay, 100)); // Minimum 100ms for safety
+      } else {
+        logger.info(`No delay between actions`);
+      }
 
     } catch (error) {
       logger.error(`Error processing ${username}: ${error.message}`);
