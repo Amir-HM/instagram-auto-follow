@@ -58,13 +58,13 @@
       "title": "Scrape Followers from Profile (Optional)",
       "type": "string",
       "description": "Instagram username to scrape followers from (e.g., 'instagram'). Leave empty to skip. The actor will follow followers from this profile.",
-      "editor": "textinput"
+      "editor": "textfield"
     },
     "scrapFromPost": {
       "title": "Scrape Likers from Post (Optional)",
       "type": "string",
       "description": "Instagram post URL to scrape likers from (e.g., 'https://www.instagram.com/p/ABC123/'). Leave empty to skip. The actor will follow accounts that liked this post.",
-      "editor": "textinput"
+      "editor": "textfield"
     },
     "maxScrapesToFollow": {
       "title": "Max Accounts to Scrape",
