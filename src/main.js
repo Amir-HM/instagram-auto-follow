@@ -1,8 +1,9 @@
 const Apify = require('apify');
 const { chromium } = require('playwright');
 
-Apify.main(async () => {
+(async () => {
   // Get input
+  const input = await Apify.getInput() || {};
   const {
     sessionCookie,
     usersToFollow = [],
@@ -14,14 +15,19 @@ Apify.main(async () => {
     scrapFromProfile,
     scrapFromPost,
     maxScrapesToFollow = 50,
-  } = await Apify.getInput();
+  } = input;
 
   // Validate required input
   if (!sessionCookie) {
     throw new Error('sessionCookie is required');
   }
 
-  const logger = Apify.utils.log;
+  const logger = {
+    info: (msg) => console.log(`[INFO] ${msg}`),
+    error: (msg) => console.error(`[ERROR] ${msg}`),
+    warning: (msg) => console.warn(`[WARNING] ${msg}`),
+  };
+
   logger.info('Instagram Auto Follow Actor started');
   logger.info(`Account type: ${accountType}`);
   logger.info(`Max follows per run: ${maxFollowsPerRun}`);
@@ -262,6 +268,9 @@ Apify.main(async () => {
   logger.info(JSON.stringify(remainingUsers));
 
   logger.info('Instagram Auto Follow Actor finished');
+})().catch(error => {
+  console.error('Fatal error:', error);
+  process.exit(1);
 });
 
 /**
@@ -330,7 +339,7 @@ async function scrapeProfileFollowers(profileUsername, sessionCookie, maxToScrap
       }
     }
   } catch (error) {
-    Apify.utils.log.warning(`Error scraping followers from ${profileUsername}: ${error.message}`);
+    console.warn(`Error scraping followers from ${profileUsername}: ${error.message}`);
   } finally {
     await browser.close();
   }
@@ -403,7 +412,7 @@ async function scrapePostLikers(postUrl, sessionCookie, maxToScrape) {
       }
     }
   } catch (error) {
-    Apify.utils.log.warning(`Error scraping likers from post: ${error.message}`);
+    console.warn(`Error scraping likers from post: ${error.message}`);
   } finally {
     await browser.close();
   }
