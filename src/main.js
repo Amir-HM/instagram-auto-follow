@@ -20,10 +20,7 @@ try {
     delayBetweenFollows = 45,
     randomDelayVariation = 15,
     accountType = 'mature',
-    useCleanedInput = false,
-    scrapFromProfile,
-    scrapFromPost,
-    maxScrapesToFollow = 50,
+    action = 'follow', // 'follow' or 'unfollow'
   } = input;
 
   // Validate required input
@@ -39,58 +36,16 @@ try {
 
   logger.info('Instagram Auto Follow Actor started');
   logger.info(`Account type: ${accountType}`);
-  logger.info(`Max follows per run: ${maxFollowsPerRun}`);
-  logger.info(`Delay between follows: ${delayBetweenFollows}s (±${randomDelayVariation}s)`);
+  logger.info(`Action: ${action}`);
+  logger.info(`Max actions per run: ${maxFollowsPerRun}`);
+  logger.info(`Delay between actions: ${delayBetweenFollows}s (±${randomDelayVariation}s)`);
 
   // Initialize storage
   const dataset = await Actor.openDataset();
-  const kvStore = await Actor.openKeyValueStore();
 
-  // Load cleaned input if requested
+  // Use provided users list
   let targetUsers = [...usersToFollow];
-  if (useCleanedInput) {
-    try {
-      const cleaned = await kvStore.getValue('CLEANED_INPUT');
-      if (cleaned) {
-        targetUsers = JSON.parse(cleaned);
-        logger.info(`Loaded ${targetUsers.length} users from cleaned input`);
-      }
-    } catch (e) {
-      logger.warning('Could not load cleaned input, using provided users');
-    }
-  }
-
-  // Scrape users from profile if provided
-  if (scrapFromProfile) {
-    logger.info(`Scraping followers from profile: ${scrapFromProfile}`);
-    const scrapedUsers = await scrapeProfileFollowers(
-      scrapFromProfile,
-      sessionCookie,
-      maxScrapesToFollow
-    );
-    targetUsers = [...targetUsers, ...scrapedUsers];
-    logger.info(`Added ${scrapedUsers.length} users from profile scraping`);
-  }
-
-  // Scrape users from post if provided
-  if (scrapFromPost) {
-    logger.info(`Scraping likers from post: ${scrapFromPost}`);
-    const scrapedUsers = await scrapePostLikers(
-      scrapFromPost,
-      sessionCookie,
-      maxScrapesToFollow
-    );
-    targetUsers = [...targetUsers, ...scrapedUsers];
-    logger.info(`Added ${scrapedUsers.length} users from post scraping`);
-  }
-
-  // Remove duplicates
-  targetUsers = [...new Set(targetUsers)];
-  logger.info(`Total unique users to process: ${targetUsers.length}`);
-
-  // Limit to maxFollowsPerRun
-  const usersToFollowThisRun = targetUsers.slice(0, maxFollowsPerRun);
-  logger.info(`Will follow ${usersToFollowThisRun.length} users in this run`);
+  logger.info(`Total users to process: ${targetUsers.length}`);
 
   // Launch browser
   const browser = await chromium.launch({
@@ -125,12 +80,22 @@ try {
 
   let followCount = 0;
   let alreadyFollowingCount = 0;
+  let unfollowCount = 0;
   let failedCount = 0;
   let rateLimited = false;
   const results = [];
 
+  // Determine action and button text
+  const actionButtonText = action === 'follow' ? 'Follow' : 'Following';
+  const targetButtonText = action === 'follow' ? 'Following' : 'Follow';
+  const actionName = action === 'follow' ? 'followed' : 'unfollowed';
+
+  // Limit to maxFollowsPerRun
+  const usersToProcessThisRun = targetUsers.slice(0, maxFollowsPerRun);
+  logger.info(`Will ${action} ${usersToProcessThisRun.length} users in this run`);
+
   // Process each user
-  for (const username of usersToFollowThisRun) {
+  for (const username of usersToProcessThisRun) {
     try {
       logger.info(`Processing user: ${username}`);
 
@@ -152,55 +117,61 @@ try {
         throw new Error('Profile not found or is private');
       }
 
-      // Look for Follow button
-      const followButton = await page.$('button:has-text("Follow")');
+      // Look for action button (Follow or Following)
+      const actionButton = await page.$(`button:has-text("${actionButtonText}")`);
 
-      if (!followButton) {
-        // Check if already following
-        const alreadyFollowingButton = await page.$('button:has-text("Following")');
-        if (alreadyFollowingButton) {
+      if (!actionButton) {
+        // Check for the opposite state
+        const oppositeButton = await page.$(`button:has-text("${targetButtonText}")`);
+        if (oppositeButton) {
+          const statusText = action === 'follow' ? 'Already following' : 'Not following';
           results.push({
             username,
-            status: 'already_following',
+            status: action === 'follow' ? 'already_following' : 'not_following',
             success: false,
-            reason: 'Already following',
+            reason: statusText,
             timestamp: new Date().toISOString(),
             runDate: new Date().toISOString(),
             accountType,
           });
           alreadyFollowingCount++;
-          logger.info(`${username}: Already following`);
+          logger.info(`${username}: ${statusText}`);
         } else {
-          throw new Error('Follow button not found');
+          throw new Error('Action button not found');
         }
       } else {
-        // Click Follow button
-        await followButton.click();
+        // Click action button
+        await actionButton.click();
         await page.waitForTimeout(1000);
 
-        // Verify follow was successful
-        const confirmFollowing = await page.$('button:has-text("Following")');
-        if (confirmFollowing) {
+        // Verify action was successful
+        const confirmButton = await page.$(`button:has-text("${targetButtonText}")`);
+        if (confirmButton) {
+          const successStatus = action === 'follow' ? 'followed' : 'unfollowed';
           results.push({
             username,
-            status: 'followed',
+            status: successStatus,
             success: true,
-            reason: 'Successfully followed',
+            reason: `Successfully ${actionName}`,
             timestamp: new Date().toISOString(),
             runDate: new Date().toISOString(),
             accountType,
           });
-          followCount++;
-          logger.info(`${username}: Successfully followed`);
+          if (action === 'follow') {
+            followCount++;
+          } else {
+            unfollowCount++;
+          }
+          logger.info(`${username}: Successfully ${actionName}`);
         } else {
-          throw new Error('Follow action did not complete');
+          throw new Error(`${action} action did not complete`);
         }
       }
 
-      // Add delay between follows (with random variation)
+      // Add delay between actions (with random variation)
       const randomDelay = (Math.random() - 0.5) * 2 * randomDelayVariation;
       const actualDelay = (delayBetweenFollows + randomDelay) * 1000;
-      logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next follow`);
+      logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next action`);
       await page.waitForTimeout(Math.max(actualDelay, 5000)); // Minimum 5s delay
 
     } catch (error) {
@@ -238,15 +209,6 @@ try {
   // Close browser
   await browser.close();
 
-  // Calculate remaining users
-  const remainingUsers = targetUsers.slice(maxFollowsPerRun);
-
-  // Save cleaned input for next run
-  if (remainingUsers.length > 0) {
-    await kvStore.setValue('CLEANED_INPUT', JSON.stringify(remainingUsers));
-    logger.info(`Saved ${remainingUsers.length} users for next run`);
-  }
-
   // Save results
   for (const result of results) {
     await dataset.pushData(result);
@@ -255,30 +217,26 @@ try {
   // Add summary
   const summary = {
     type: 'summary',
-    totalProcessed: usersToFollowThisRun.length,
-    followCount,
-    alreadyFollowingCount,
+    action,
+    totalProcessed: usersToProcessThisRun.length,
+    successCount: action === 'follow' ? followCount : unfollowCount,
+    alreadyActionedCount: alreadyFollowingCount,
     failedCount,
     rateLimited,
-    remainingUsers: remainingUsers.length,
-    removedSuccessfully: followCount,
     timestamp: new Date().toISOString(),
   };
 
   await dataset.pushData(summary);
 
   logger.info('=== SUMMARY ===');
+  logger.info(`Action: ${action}`);
   logger.info(`Total processed: ${summary.totalProcessed}`);
-  logger.info(`Successfully followed: ${followCount}`);
-  logger.info(`Already following: ${alreadyFollowingCount}`);
+  logger.info(`Successfully ${actionName}: ${summary.successCount}`);
+  logger.info(`Already ${actionName}: ${alreadyFollowingCount}`);
   logger.info(`Failed: ${failedCount}`);
-  logger.info(`Remaining users for next run: ${remainingUsers.length}`);
   if (rateLimited) {
     logger.warning('Rate limit detected - actor stopped');
   }
-
-  logger.info('=== CLEANED INPUT FOR NEXT RUN ===');
-  logger.info(JSON.stringify(remainingUsers));
 
   logger.info('Instagram Auto Follow Actor finished');
 
@@ -287,236 +245,4 @@ try {
 } catch (error) {
   console.error('Fatal error:', error);
   await Actor.exit();
-}
-
-/**
- * Scrape followers from a public Instagram profile
- */
-async function scrapeProfileFollowers(profileUsername, sessionCookie, maxToScrape) {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
-  const followers = [];
-
-  try {
-    await context.addCookies([
-      {
-        name: 'sessionid',
-        value: sessionCookie,
-        domain: '.instagram.com',
-        path: '/',
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-      },
-    ]);
-
-    const profileUrl = profileUsername.startsWith('http') 
-      ? profileUsername 
-      : `https://www.instagram.com/${profileUsername}/`;
-    await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {
-      console.warn('Profile page load timeout or error, continuing anyway...');
-    });
-    await page.waitForTimeout(2000);
-
-    // Log page content for debugging
-    const pageTitle = await page.title();
-    console.log(`[SCRAPE DEBUG] Loaded page with title: ${pageTitle}`);
-
-    // Check if page loaded correctly
-    const profileCheck = await page.evaluate(() => {
-      return {
-        hasH2: !!document.querySelector('h2'),
-        bodyText: document.body.innerText.substring(0, 200)
-      };
-    });
-    console.log(`[SCRAPE DEBUG] Profile check: ${JSON.stringify(profileCheck)}`);
-
-    // Try multiple selectors for followers link
-    const followersSelectors = [
-      'a[href*="followers"]',
-      'a:has-text("followers")',
-      'button:has-text("followers")',
-      'span:has-text("follower")',
-    ];
-
-    let followersFound = false;
-    for (const selector of followersSelectors) {
-      try {
-        const element = await page.$(selector).catch(() => null);
-        if (element) {
-          console.log(`[SCRAPE DEBUG] Found followers element with selector: ${selector}`);
-          await element.click();
-          followersFound = true;
-          await page.waitForTimeout(1500);
-          break;
-        }
-      } catch (e) {
-        // Continue to next selector
-      }
-    }
-
-    if (!followersFound) {
-      console.warn(`[SCRAPE DEBUG] Could not find followers link with any selector`);
-      return followers;
-    }
-
-    // Scroll through followers list and collect usernames
-    const followersList = await page.$('[role="dialog"]');
-    if (followersList) {
-      let previousHeight = 0;
-      let currentHeight = 0;
-      let iterations = 0;
-      const maxIterations = 20;
-
-      while (followers.length < maxToScrape && iterations < maxIterations) {
-        currentHeight = await page.evaluate(() => {
-          const listContainer = document.querySelector('[role="dialog"] div');
-          return listContainer ? listContainer.scrollHeight : 0;
-        });
-
-        if (currentHeight === previousHeight) {
-          console.log(`[SCRAPE DEBUG] No more followers to scroll (height: ${currentHeight})`);
-          break;
-        }
-
-        await page.evaluate(() => {
-          const listContainer = document.querySelector('[role="dialog"] div');
-          if (listContainer) listContainer.scrollTop = listContainer.scrollHeight;
-        });
-
-        await page.waitForTimeout(500);
-        previousHeight = currentHeight;
-        iterations++;
-      }
-
-      // Extract usernames
-      const usernames = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('[role="dialog"] a[title]'));
-        return links.map(link => link.textContent.trim()).filter(name => name && name.length > 0);
-      });
-
-      console.log(`[SCRAPE DEBUG] Found ${usernames.length} followers`);
-      followers.push(...usernames.slice(0, maxToScrape));
-    } else {
-      console.warn('[SCRAPE DEBUG] Could not find followers dialog');
-    }
-  } catch (error) {
-    console.warn(`Error scraping followers from ${profileUsername}: ${error.message}`);
-  } finally {
-    await browser.close();
-  }
-
-  return followers;
-}
-
-/**
- * Scrape likers from an Instagram post
- */
-async function scrapePostLikers(postUrl, sessionCookie, maxToScrape) {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
-  const likers = [];
-
-  try {
-    await context.addCookies([
-      {
-        name: 'sessionid',
-        value: sessionCookie,
-        domain: '.instagram.com',
-        path: '/',
-        httpOnly: true,
-        secure: true,
-        sameSite: 'Lax',
-      },
-    ]);
-
-    await page.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {
-      console.warn('Post page load timeout or error, continuing anyway...');
-    });
-    await page.waitForTimeout(2000);
-
-    // Log page content for debugging
-    const pageTitle = await page.title();
-    console.log(`[SCRAPE DEBUG] Post page loaded with title: ${pageTitle}`);
-
-    // Try multiple selectors for likes link
-    const likesSelectors = [
-      'a[href*="liked_by"]',
-      'button:has-text("like")',
-      'span:has-text("like")',
-      'a:has-text("like")',
-    ];
-
-    let likesFound = false;
-    for (const selector of likesSelectors) {
-      try {
-        const element = await page.$(selector).catch(() => null);
-        if (element) {
-          console.log(`[SCRAPE DEBUG] Found likes element with selector: ${selector}`);
-          await element.click();
-          likesFound = true;
-          await page.waitForTimeout(1500);
-          break;
-        }
-      } catch (e) {
-        // Continue to next selector
-      }
-    }
-
-    if (!likesFound) {
-      console.warn(`[SCRAPE DEBUG] Could not find likes link with any selector`);
-      return likers;
-    }
-
-    // Scroll through likers list and collect usernames
-    const likersList = await page.$('[role="dialog"]');
-    if (likersList) {
-      let previousHeight = 0;
-      let currentHeight = 0;
-      let iterations = 0;
-      const maxIterations = 20;
-
-      while (likers.length < maxToScrape && iterations < maxIterations) {
-        currentHeight = await page.evaluate(() => {
-          const listContainer = document.querySelector('[role="dialog"] div');
-          return listContainer ? listContainer.scrollHeight : 0;
-        });
-
-        if (currentHeight === previousHeight) {
-          console.log(`[SCRAPE DEBUG] No more likers to scroll (height: ${currentHeight})`);
-          break;
-        }
-
-        await page.evaluate(() => {
-          const listContainer = document.querySelector('[role="dialog"] div');
-          if (listContainer) listContainer.scrollTop = listContainer.scrollHeight;
-        });
-
-        await page.waitForTimeout(500);
-        previousHeight = currentHeight;
-        iterations++;
-      }
-
-      // Extract usernames
-      const usernames = await page.evaluate(() => {
-        const links = Array.from(document.querySelectorAll('[role="dialog"] a[title]'));
-        return links.map(link => link.textContent.trim()).filter(name => name && name.length > 0);
-      });
-
-      console.log(`[SCRAPE DEBUG] Found ${usernames.length} likers`);
-      likers.push(...usernames.slice(0, maxToScrape));
-    } else {
-      console.warn('[SCRAPE DEBUG] Could not find likers dialog');
-    }
-  } catch (error) {
-    console.warn(`Error scraping likers from post: ${error.message}`);
-  } finally {
-    await browser.close();
-  }
-
-  return likers;
 }

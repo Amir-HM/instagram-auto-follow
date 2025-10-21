@@ -1,5 +1,5 @@
 {
-  "title": "Instagram Auto Follow Input",
+  "title": "Instagram Auto Follow/Unfollow Input",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -23,18 +23,26 @@
       ],
       "default": "mature"
     },
+    "action": {
+      "title": "Action to Perform",
+      "type": "string",
+      "description": "Choose whether to follow or unfollow users",
+      "enum": ["follow", "unfollow"],
+      "enumTitles": ["Follow Users", "Unfollow Users"],
+      "default": "follow"
+    },
     "maxFollowsPerRun": {
-      "title": "Max Follows Per Run",
+      "title": "Max Actions Per Run",
       "type": "integer",
-      "description": "⚠️ IMPORTANT: Never exceed 50 follows in one run. Recommended: 5-10 (brand new), 10-15 (new), 15-25 (mature), 25-50 (aged)",
+      "description": "Never exceed 50 actions in one run. Recommended: 5-10 (brand new), 10-15 (new), 15-25 (mature), 25-50 (aged)",
       "default": 15,
       "minimum": 1,
       "maximum": 50
     },
     "delayBetweenFollows": {
-      "title": "Delay Between Follows (seconds)",
+      "title": "Delay Between Actions (seconds)",
       "type": "integer",
-      "description": "⚠️ Minimum 30s recommended (brand new accounts: 60-90s). Time to wait between follows to avoid detection",
+      "description": "Minimum 30s recommended (brand new accounts: 60-90s). Time to wait between actions to avoid detection",
       "default": 45,
       "minimum": 20,
       "maximum": 300
@@ -47,38 +55,12 @@
       "minimum": 5,
       "maximum": 60
     },
-    "useCleanedInput": {
-      "title": "Use Cleaned Input from Previous Run",
-      "type": "boolean",
-      "description": "If enabled, automatically uses the cleaned input from the previous run (removes already followed accounts)",
-      "default": false
-    },
-    "scrapFromProfile": {
-      "title": "Scrape Followers from Profile (Optional)",
-      "type": "string",
-      "description": "Instagram username or full profile URL to scrape followers from (e.g., 'instagram' or 'https://www.instagram.com/instagram/'). Leave empty to skip.",
-      "editor": "textfield"
-    },
-    "scrapFromPost": {
-      "title": "Scrape Likers from Post (Optional)",
-      "type": "string",
-      "description": "Instagram post URL to scrape likers from (e.g., 'https://www.instagram.com/p/ABC123/'). Leave empty to skip.",
-      "editor": "textfield"
-    },
-    "maxScrapesToFollow": {
-      "title": "Max Accounts to Scrape",
-      "type": "integer",
-      "description": "Maximum number of followers/likers to scrape and auto-follow (from profiles/posts)",
-      "default": 200,
-      "minimum": 1,
-      "maximum": 500
-    },
     "usersToFollow": {
-      "title": "Users to Follow (Manual List)",
+      "title": "Users to Follow/Unfollow",
       "type": "array",
-      "description": "List of Instagram usernames to follow manually. Add as many as you want; the actor will process them in batches based on Max Follows Per Run setting.",
+      "description": "List of Instagram usernames to follow or unfollow (one per line)",
       "editor": "stringList"
     }
   },
-  "required": ["sessionCookie"]
+  "required": ["sessionCookie", "usersToFollow"]
 }
