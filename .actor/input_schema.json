@@ -42,9 +42,9 @@
     "delayBetweenFollows": {
       "title": "Delay Between Actions (seconds)",
       "type": "integer",
-      "description": "Minimum 30s recommended (brand new accounts: 60-90s). Time to wait between actions to avoid detection",
+      "description": "Time to wait between actions to avoid detection. Recommended 30-60s, but can be 0 for fast runs",
       "default": 45,
-      "minimum": 20,
+      "minimum": 0,
       "maximum": 300
     },
     "randomDelayVariation": {
