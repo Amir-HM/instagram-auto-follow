@@ -258,34 +258,58 @@ try {
         try {
           // Click action button
           await actionButton.click();
-          await page.waitForTimeout(2000);
+          await page.waitForTimeout(3000); // Wait for Instagram UI to update
 
           // Verify action was successful by checking for the opposite button
-          let confirmButton = null;
+          // For follow action: check for "Following" (public) or "Requested" (private accounts)
+          // For unfollow action: check for "Follow"
           let confirmFound = false;
-          
+          let wasFollowRequest = false;
+
           try {
-            const confirmLocator = page.locator(`button:has-text("${targetButtonText}")`).first();
-            const count = await confirmLocator.count().catch(() => 0);
-            
-            if (count > 0) {
-              confirmButton = confirmLocator;
-              confirmFound = true;
+            if (action === 'follow') {
+              // Check for "Following" (public account) or "Requested" (private account)
+              const followingLocator = page.locator(`button:has-text("Following")`).first();
+              const requestedLocator = page.locator(`button:has-text("Requested")`).first();
+
+              const followingCount = await followingLocator.count().catch(() => 0);
+              const requestedCount = await requestedLocator.count().catch(() => 0);
+
+              if (followingCount > 0) {
+                confirmFound = true;
+                logger.info(`✓ Found "Following" button - follow confirmed`);
+              } else if (requestedCount > 0) {
+                confirmFound = true;
+                wasFollowRequest = true;
+                logger.info(`✓ Found "Requested" button - follow request sent (private account)`);
+              } else {
+                logger.warning(`Could not verify action - neither "Following" nor "Requested" button found after click`);
+              }
             } else {
-              logger.warning(`Could not verify action - opposite button not found after click`);
+              // For unfollow, check for "Follow" button
+              const confirmLocator = page.locator(`button:has-text("${targetButtonText}")`).first();
+              const count = await confirmLocator.count().catch(() => 0);
+
+              if (count > 0) {
+                confirmFound = true;
+                logger.info(`✓ Found "Follow" button - unfollow confirmed`);
+              } else {
+                logger.warning(`Could not verify action - "Follow" button not found after click`);
+              }
             }
           } catch (e) {
             logger.warning(`Could not verify action completion: ${e.message}`);
           }
-          
+
           if (confirmFound) {
-            const successStatus = action === 'follow' ? 'followed' : 'unfollowed';
-            logger.info(`✓ ${username}: Successfully ${actionName}`);
+            const successStatus = action === 'follow' ? (wasFollowRequest ? 'requested' : 'followed') : 'unfollowed';
+            const successMessage = wasFollowRequest ? 'Follow request sent' : `Successfully ${actionName}`;
+            logger.info(`✓ ${username}: ${successMessage}`);
             results.push({
               username,
               status: successStatus,
               success: true,
-              reason: `Successfully ${actionName}`,
+              reason: successMessage,
               timestamp: new Date().toISOString(),
               runDate: new Date().toISOString(),
               accountType,
