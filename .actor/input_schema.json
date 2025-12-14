@@ -1,5 +1,5 @@
 {
-  "title": "Instagram Auto Follow/Unfollow Input",
+  "title": "Instagram Auto Follow Input",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -10,56 +10,62 @@
       "editor": "textarea",
       "isSecret": true
     },
-    "accountType": {
-      "title": "Account Type",
-      "type": "string",
-      "description": "Select your account age/activity level to auto-set safe daily follow limits",
-      "enum": ["brand_new", "new", "mature", "aged"],
-      "enumTitles": [
-        "Brand New Account (5-10/day - First 2 weeks)",
-        "New Account (10-15/day - First 3 months)",
-        "Mature Account (15-25/day - 3+ months old)",
-        "Aged Account (25-50/day - 1+ years old)"
-      ],
-      "default": "mature"
-    },
-    "action": {
-      "title": "Action to Perform",
-      "type": "string",
-      "description": "Choose whether to follow or unfollow users",
-      "enum": ["follow", "unfollow"],
-      "enumTitles": ["Follow Users", "Unfollow Users"],
-      "default": "follow"
+    "usersToFollow": {
+      "title": "Users to Follow",
+      "type": "array",
+      "description": "List of Instagram usernames to follow",
+      "editor": "stringList",
+      "placeholderValue": "username1, username2, username3"
     },
     "maxFollowsPerRun": {
-      "title": "Max Actions Per Run",
+      "title": "Max Follows Per Run",
       "type": "integer",
-      "description": "Never exceed 50 actions in one run. Recommended: 5-10 (brand new), 10-15 (new), 15-25 (mature), 25-50 (aged)",
-      "default": 15,
+      "description": "Maximum number of accounts to follow in this run (recommended: 10-40 depending on account age)",
+      "default": 20,
       "minimum": 1,
-      "maximum": 50
+      "maximum": 100
     },
     "delayBetweenFollows": {
-      "title": "Delay Between Actions (seconds)",
+      "title": "Delay Between Follows (seconds)",
       "type": "integer",
-      "description": "Time to wait between actions to avoid detection. Recommended 30-60s, but can be 0 for fast runs",
-      "default": 45,
-      "minimum": 0,
+      "description": "Time to wait between each follow action (recommended: 10-30 seconds)",
+      "default": 15,
+      "minimum": 5,
       "maximum": 300
     },
     "randomDelayVariation": {
-      "title": "Random Delay Variation (±seconds)",
+      "title": "Random Delay Variation (seconds)",
       "type": "integer",
-      "description": "Random variation to make activity look human. Recommended: 15-30 seconds",
-      "default": 20,
-      "minimum": 5,
+      "description": "Random variation added to delay (±seconds) to make activity look more human",
+      "default": 5,
+      "minimum": 0,
       "maximum": 60
     },
-    "usersToFollow": {
-      "title": "Users to Follow/Unfollow",
-      "type": "array",
-      "description": "List of Instagram usernames to follow or unfollow (one per line)",
-      "editor": "stringList"
+    "accountType": {
+      "title": "Account Type",
+      "type": "string",
+      "description": "Type of your Instagram account (affects daily limits)",
+      "enum": ["new", "mature"],
+      "enumTitles": ["New/High Activity (10-20/day)", "Mature Account (20-40/day)"],
+      "default": "mature"
+    },
+    "useCleanedInput": {
+      "title": "Use Cleaned Input from Previous Run",
+      "type": "boolean",
+      "description": "If enabled, automatically uses the cleaned input from the previous run (removes already followed accounts). Make sure to run at least once first!",
+      "default": false
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Select proxies to be used. Residential proxies are recommended for Instagram to avoid blocks.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": ["RESIDENTIAL"]
+      },
+      "sectionCaption": "Proxy Configuration",
+      "sectionDescription": "Configure proxy settings to avoid IP blocks and improve success rates."
     }
   },
   "required": ["sessionCookie", "usersToFollow"]

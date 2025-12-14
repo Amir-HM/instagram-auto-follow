@@ -7,20 +7,21 @@ await Actor.init();
 try {
   // Get input - with fallback for local testing
   let input = await Actor.getInput() || {};
-  
+
   // For local testing, allow input from environment variables
   if (Object.keys(input).length === 0 && process.env.APIFY_TEST_INPUT) {
     input = JSON.parse(process.env.APIFY_TEST_INPUT);
   }
-  
+
   const {
     sessionCookie,
     usersToFollow = [],
     maxFollowsPerRun = 20,
-    delayBetweenFollows = 45,
-    randomDelayVariation = 15,
+    delayBetweenFollows = 15,
+    randomDelayVariation = 5,
     accountType = 'mature',
-    action = 'follow', // 'follow' or 'unfollow'
+    useCleanedInput = false,
+    proxyConfiguration,
   } = input;
 
   // Validate required input
@@ -36,22 +37,48 @@ try {
 
   logger.info('Instagram Auto Follow Actor started');
   logger.info(`Account type: ${accountType}`);
-  logger.info(`Action: ${action}`);
-  logger.info(`Max actions per run: ${maxFollowsPerRun}`);
-  logger.info(`Delay between actions: ${delayBetweenFollows}s (±${randomDelayVariation}s)`);
+  logger.info(`Max follows per run: ${maxFollowsPerRun}`);
+  logger.info(`Delay between follows: ${delayBetweenFollows}s (+-${randomDelayVariation}s)`);
 
   // Initialize storage
   const dataset = await Actor.openDataset();
+  const keyValueStore = await Actor.openKeyValueStore();
 
-  // Use provided users list
+  // Handle useCleanedInput - load from previous run if enabled
   let targetUsers = [...usersToFollow];
+  if (useCleanedInput) {
+    const cleanedInput = await keyValueStore.getValue('CLEANED_INPUT');
+    if (cleanedInput && cleanedInput.usersToFollow && cleanedInput.usersToFollow.length > 0) {
+      logger.info(`Using cleaned input from previous run: ${cleanedInput.usersToFollow.length} users`);
+      targetUsers = cleanedInput.usersToFollow;
+    } else {
+      logger.warning('useCleanedInput enabled but no cleaned input found, using provided list');
+    }
+  }
+
   logger.info(`Total users to process: ${targetUsers.length}`);
 
-  // Launch browser
-  const browser = await chromium.launch({
+  // Configure proxy if provided
+  let proxyUrl = null;
+  if (proxyConfiguration) {
+    const proxyConfig = await Actor.createProxyConfiguration(proxyConfiguration);
+    if (proxyConfig) {
+      proxyUrl = await proxyConfig.newUrl();
+      logger.info(`Using proxy: ${proxyUrl.replace(/:[^:@]+@/, ':****@')}`);
+    }
+  }
+
+  // Launch browser with optional proxy
+  const launchOptions = {
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+  };
+
+  if (proxyUrl) {
+    launchOptions.proxy = { server: proxyUrl };
+  }
+
+  const browser = await chromium.launch(launchOptions);
 
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -80,19 +107,16 @@ try {
 
   let followCount = 0;
   let alreadyFollowingCount = 0;
-  let unfollowCount = 0;
+  let requestedCount = 0;
   let failedCount = 0;
   let rateLimited = false;
   const results = [];
-
-  // Determine action and button text
-  const actionButtonText = action === 'follow' ? 'Follow' : 'Following';
-  const targetButtonText = action === 'follow' ? 'Following' : 'Follow';
-  const actionName = action === 'follow' ? 'followed' : 'unfollowed';
+  const remainingUsers = [];
 
   // Limit to maxFollowsPerRun
   const usersToProcessThisRun = targetUsers.slice(0, maxFollowsPerRun);
-  logger.info(`Will ${action} ${usersToProcessThisRun.length} users in this run`);
+  const usersNotProcessed = targetUsers.slice(maxFollowsPerRun);
+  logger.info(`Will follow ${usersToProcessThisRun.length} users in this run`);
 
   // Process each user
   for (const username of usersToProcessThisRun) {
@@ -127,68 +151,80 @@ try {
         const mainContent = document.querySelector('main');
         // Method 3: Check for profile section
         const profileSection = document.querySelector('section');
-        
+
         return !!(profileHeader || mainContent || profileSection);
       }).catch(() => false);
 
       if (!profileExists) {
         logger.warning(`Profile detection failed, but continuing anyway to check for buttons...`);
       } else {
-        logger.info(`✓ Profile found for ${username}`);
+        logger.info(`Profile found for ${username}`);
       }
 
-      logger.info(`Looking for action button...`);
+      logger.info(`Looking for Follow button...`);
 
-      // Look for action button - use locator for better resilience
+      // Look for Follow button - use locator for better resilience
       let actionButton = null;
       let actionButtonFound = false;
-      
+
       try {
         // Strategy 1: Try to find button with locator using text
-        const buttonLocator = page.locator(`button:has-text("${actionButtonText}"), button:has-text("${actionButtonText.toLowerCase()}")`).first();
+        const buttonLocator = page.locator(`button:has-text("Follow"), button:has-text("follow")`).first();
         const count = await buttonLocator.count().catch(() => 0);
-        
+
         if (count > 0) {
-          logger.info(`✓ Found action button using text locator for "${actionButtonText}"`);
-          actionButton = buttonLocator;
-          actionButtonFound = true;
-        } else {
-          logger.info(`✗ Strategy 1 failed - no button found with text "${actionButtonText}"`);
+          // Make sure it's not "Following" or "Requested"
+          const text = await buttonLocator.textContent().catch(() => '');
+          if (text.trim() === 'Follow') {
+            logger.info(`Found Follow button using text locator`);
+            actionButton = buttonLocator;
+            actionButtonFound = true;
+          }
+        }
+
+        if (!actionButtonFound) {
+          logger.info(`Strategy 1 failed - no Follow button found`);
         }
       } catch (e) {
         logger.warning(`Strategy 1 error: ${e.message}`);
       }
-      
+
       // Strategy 2: Look for button by aria-label
       if (!actionButtonFound) {
         try {
-          const ariaButtonLocator = page.locator(`button[aria-label*="${actionButtonText}"]`).first();
+          const ariaButtonLocator = page.locator(`button[aria-label*="Follow"]`).first();
           const count = await ariaButtonLocator.count().catch(() => 0);
-          
+
           if (count > 0) {
-            logger.info(`✓ Found action button using aria-label for "${actionButtonText}"`);
-            actionButton = ariaButtonLocator;
-            actionButtonFound = true;
-          } else {
-            logger.info(`✗ Strategy 2 failed - no button found with aria-label "${actionButtonText}"`);
+            const ariaLabel = await ariaButtonLocator.getAttribute('aria-label').catch(() => '');
+            // Make sure it's not "Following" or contains "Unfollow"
+            if (ariaLabel && !ariaLabel.includes('Following') && !ariaLabel.includes('Unfollow')) {
+              logger.info(`Found Follow button using aria-label`);
+              actionButton = ariaButtonLocator;
+              actionButtonFound = true;
+            }
+          }
+
+          if (!actionButtonFound) {
+            logger.info(`Strategy 2 failed - no Follow button found with aria-label`);
           }
         } catch (e) {
           logger.warning(`Strategy 2 error: ${e.message}`);
         }
       }
-      
-      // Strategy 3: Search all buttons for text match
+
+      // Strategy 3: Search all buttons for exact text match
       if (!actionButtonFound) {
         try {
           const allButtons = await page.locator('button').all();
           logger.info(`Found ${allButtons.length} buttons total on page`);
-          
+
           for (let i = 0; i < allButtons.length; i++) {
             const btn = allButtons[i];
             try {
               const text = await btn.textContent().catch(() => '');
-              if (text.trim() === actionButtonText) {
-                logger.info(`✓ Found button at index ${i} with exact text match: "${text.trim()}"`);
+              if (text.trim() === 'Follow') {
+                logger.info(`Found button at index ${i} with exact text match: "Follow"`);
                 actionButton = btn;
                 actionButtonFound = true;
                 break;
@@ -197,9 +233,9 @@ try {
               // Skip this button
             }
           }
-          
+
           if (!actionButtonFound) {
-            logger.info(`✗ Strategy 3 failed - no exact text match for "${actionButtonText}" among ${allButtons.length} buttons`);
+            logger.info(`Strategy 3 failed - no exact text match for "Follow" among ${allButtons.length} buttons`);
           }
         } catch (e) {
           logger.warning(`Strategy 3 error: ${e.message}`);
@@ -207,33 +243,38 @@ try {
       }
 
       if (!actionButtonFound) {
-        logger.info(`Action button "${actionButtonText}" not found, checking for opposite state...`);
-        
-        // Check for the opposite state (already in desired state)
-        let oppositeButton = null;
-        let oppositeButtonFound = false;
-        
+        logger.info(`Follow button not found, checking if already following...`);
+
+        // Check if already following or requested
+        let alreadyInState = false;
+        let stateType = null;
+
         try {
-          const oppositeLocator = page.locator(`button:has-text("${targetButtonText}")`).first();
-          const count = await oppositeLocator.count().catch(() => 0);
-          
-          if (count > 0) {
-            logger.info(`✓ Found opposite button: "${targetButtonText}" - already in desired state`);
-            oppositeButton = oppositeLocator;
-            oppositeButtonFound = true;
-          } else {
-            logger.info(`✗ Opposite button not found either`);
+          const followingLocator = page.locator(`button:has-text("Following")`).first();
+          const requestedLocator = page.locator(`button:has-text("Requested")`).first();
+
+          const followingCount = await followingLocator.count().catch(() => 0);
+          const reqCount = await requestedLocator.count().catch(() => 0);
+
+          if (followingCount > 0) {
+            alreadyInState = true;
+            stateType = 'already_following';
+            logger.info(`Found "Following" button - already following this user`);
+          } else if (reqCount > 0) {
+            alreadyInState = true;
+            stateType = 'already_requested';
+            logger.info(`Found "Requested" button - already sent follow request`);
           }
         } catch (e) {
-          logger.warning(`Could not find opposite button: ${e.message}`);
+          logger.warning(`Could not check follow state: ${e.message}`);
         }
-        
-        if (oppositeButtonFound) {
-          const statusText = action === 'follow' ? 'Already following' : 'Not following';
+
+        if (alreadyInState) {
+          const statusText = stateType === 'already_following' ? 'Already following' : 'Already requested';
           logger.info(`${username}: ${statusText}`);
           results.push({
             username,
-            status: action === 'follow' ? 'already_following' : 'not_following',
+            status: stateType,
             success: false,
             reason: statusText,
             timestamp: new Date().toISOString(),
@@ -250,61 +291,46 @@ try {
           } catch (e) {
             logger.warning(`Could not save screenshot: ${e.message}`);
           }
-          throw new Error('Action button not found on profile');
+          remainingUsers.push(username);
+          throw new Error('Follow button not found on profile');
         }
       } else {
-        logger.info(`Clicking action button for ${username}...`);
-        
+        logger.info(`Clicking Follow button for ${username}...`);
+
         try {
-          // Click action button
+          // Click Follow button
           await actionButton.click();
           await page.waitForTimeout(3000); // Wait for Instagram UI to update
 
-          // Verify action was successful by checking for the opposite button
-          // For follow action: check for "Following" (public) or "Requested" (private accounts)
-          // For unfollow action: check for "Follow"
+          // Verify follow was successful by checking for "Following" or "Requested"
           let confirmFound = false;
           let wasFollowRequest = false;
 
           try {
-            if (action === 'follow') {
-              // Check for "Following" (public account) or "Requested" (private account)
-              const followingLocator = page.locator(`button:has-text("Following")`).first();
-              const requestedLocator = page.locator(`button:has-text("Requested")`).first();
+            const followingLocator = page.locator(`button:has-text("Following")`).first();
+            const requestedLocator = page.locator(`button:has-text("Requested")`).first();
 
-              const followingCount = await followingLocator.count().catch(() => 0);
-              const requestedCount = await requestedLocator.count().catch(() => 0);
+            const followingCount = await followingLocator.count().catch(() => 0);
+            const reqCount = await requestedLocator.count().catch(() => 0);
 
-              if (followingCount > 0) {
-                confirmFound = true;
-                logger.info(`✓ Found "Following" button - follow confirmed`);
-              } else if (requestedCount > 0) {
-                confirmFound = true;
-                wasFollowRequest = true;
-                logger.info(`✓ Found "Requested" button - follow request sent (private account)`);
-              } else {
-                logger.warning(`Could not verify action - neither "Following" nor "Requested" button found after click`);
-              }
+            if (followingCount > 0) {
+              confirmFound = true;
+              logger.info(`Found "Following" button - follow confirmed`);
+            } else if (reqCount > 0) {
+              confirmFound = true;
+              wasFollowRequest = true;
+              logger.info(`Found "Requested" button - follow request sent (private account)`);
             } else {
-              // For unfollow, check for "Follow" button
-              const confirmLocator = page.locator(`button:has-text("${targetButtonText}")`).first();
-              const count = await confirmLocator.count().catch(() => 0);
-
-              if (count > 0) {
-                confirmFound = true;
-                logger.info(`✓ Found "Follow" button - unfollow confirmed`);
-              } else {
-                logger.warning(`Could not verify action - "Follow" button not found after click`);
-              }
+              logger.warning(`Could not verify follow - neither "Following" nor "Requested" button found after click`);
             }
           } catch (e) {
-            logger.warning(`Could not verify action completion: ${e.message}`);
+            logger.warning(`Could not verify follow completion: ${e.message}`);
           }
 
           if (confirmFound) {
-            const successStatus = action === 'follow' ? (wasFollowRequest ? 'requested' : 'followed') : 'unfollowed';
-            const successMessage = wasFollowRequest ? 'Follow request sent' : `Successfully ${actionName}`;
-            logger.info(`✓ ${username}: ${successMessage}`);
+            const successStatus = wasFollowRequest ? 'requested' : 'followed';
+            const successMessage = wasFollowRequest ? 'Follow request sent' : 'Successfully followed';
+            logger.info(`${username}: ${successMessage}`);
             results.push({
               username,
               status: successStatus,
@@ -314,29 +340,29 @@ try {
               runDate: new Date().toISOString(),
               accountType,
             });
-            if (action === 'follow') {
-              followCount++;
-            } else {
-              unfollowCount++;
+            if (wasFollowRequest) {
+              requestedCount++;
             }
+            followCount++;
           } else {
-            throw new Error(`${action} action did not complete - verification button not found`);
+            remainingUsers.push(username);
+            throw new Error('follow action did not complete - verification button not found');
           }
         } catch (clickError) {
-          logger.error(`Error clicking action button: ${clickError.message}`);
+          logger.error(`Error clicking Follow button: ${clickError.message}`);
           throw clickError;
         }
       }
 
-      // Add delay between actions (with random variation)
+      // Add delay between follows (with random variation)
       const randomDelay = (Math.random() - 0.5) * 2 * randomDelayVariation;
       const actualDelay = (delayBetweenFollows + randomDelay) * 1000;
-      
+
       if (actualDelay > 0) {
-        logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next action`);
+        logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next follow`);
         await page.waitForTimeout(Math.max(actualDelay, 100)); // Minimum 100ms for safety
       } else {
-        logger.info(`No delay between actions`);
+        logger.info(`No delay between follows`);
       }
 
     } catch (error) {
@@ -355,6 +381,9 @@ try {
           accountType,
         });
         logger.warning('Rate limit detected, stopping actor');
+        // Add remaining users to the list for next run
+        const currentIndex = usersToProcessThisRun.indexOf(username);
+        remainingUsers.push(...usersToProcessThisRun.slice(currentIndex + 1));
         break;
       }
 
@@ -379,14 +408,24 @@ try {
     await dataset.pushData(result);
   }
 
+  // Save cleaned input for next run (users not yet followed)
+  const cleanedUsers = [...remainingUsers, ...usersNotProcessed];
+  await keyValueStore.setValue('CLEANED_INPUT', {
+    usersToFollow: cleanedUsers,
+    lastUpdated: new Date().toISOString(),
+  });
+  logger.info(`Saved ${cleanedUsers.length} users to CLEANED_INPUT for next run`);
+
   // Add summary
   const summary = {
     type: 'summary',
-    action,
+    action: 'follow',
     totalProcessed: usersToProcessThisRun.length,
-    successCount: action === 'follow' ? followCount : unfollowCount,
-    alreadyActionedCount: alreadyFollowingCount,
+    successCount: followCount,
+    requestedCount,
+    alreadyFollowingCount,
     failedCount,
+    remainingUsers: cleanedUsers.length,
     rateLimited,
     timestamp: new Date().toISOString(),
   };
@@ -394,11 +433,12 @@ try {
   await dataset.pushData(summary);
 
   logger.info('=== SUMMARY ===');
-  logger.info(`Action: ${action}`);
   logger.info(`Total processed: ${summary.totalProcessed}`);
-  logger.info(`Successfully ${actionName}: ${summary.successCount}`);
-  logger.info(`Already ${actionName}: ${alreadyFollowingCount}`);
+  logger.info(`Successfully followed: ${followCount - requestedCount}`);
+  logger.info(`Follow requests sent: ${requestedCount}`);
+  logger.info(`Already following: ${alreadyFollowingCount}`);
   logger.info(`Failed: ${failedCount}`);
+  logger.info(`Remaining for next run: ${cleanedUsers.length}`);
   if (rateLimited) {
     logger.warning('Rate limit detected - actor stopped');
   }
