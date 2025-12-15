@@ -313,9 +313,15 @@ try {
       logger.info(`Looking for Follow button...`);
 
       // Helper function to check if text matches any Follow button text
-      const isFollowText = (text) => FOLLOW_TEXTS.some(t => text.trim() === t);
-      const isFollowingText = (text) => FOLLOWING_TEXTS.some(t => text.trim() === t);
-      const isRequestedText = (text) => REQUESTED_TEXTS.some(t => text.trim() === t);
+      // Use startsWith for Following/Requested since button text may include icon text like "FollowingDown chevron icon"
+      const isFollowingText = (text) => FOLLOWING_TEXTS.some(t => text.trim().startsWith(t));
+      const isRequestedText = (text) => REQUESTED_TEXTS.some(t => text.trim().startsWith(t));
+      // For Follow button, check exact match OR startsWith but NOT if it's Following/Requested
+      const isFollowText = (text) => {
+        const trimmed = text.trim();
+        const matchesFollow = FOLLOW_TEXTS.some(t => trimmed === t || trimmed.startsWith(t + ' '));
+        return matchesFollow && !isFollowingText(text) && !isRequestedText(text);
+      };
 
       // Look for Follow button - use locator for better resilience
       let actionButton = null;
