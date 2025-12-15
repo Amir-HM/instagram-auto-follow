@@ -321,10 +321,10 @@ try {
       let actionButton = null;
       let actionButtonFound = false;
 
-      // Strategy 1: Search all buttons for exact text match (most reliable with multi-language)
+      // Strategy 1: Search all buttons AND elements with role="button" (Instagram uses divs with role="button")
       try {
-        const allButtons = await page.locator('button').all();
-        logger.info(`Found ${allButtons.length} buttons total on page`);
+        const allButtons = await page.locator('button, [role="button"]').all();
+        logger.info(`Found ${allButtons.length} buttons/role buttons total on page`);
 
         for (let i = 0; i < allButtons.length; i++) {
           const btn = allButtons[i];
@@ -351,11 +351,12 @@ try {
         logger.warning(`Strategy 1 error: ${e.message}`);
       }
 
-      // Strategy 2: Try locator with common Follow texts
+      // Strategy 2: Try locator with common Follow texts (including role="button" elements)
       if (!actionButtonFound) {
         try {
           for (const followText of FOLLOW_TEXTS.slice(0, 10)) { // Try first 10 common ones
-            const buttonLocator = page.locator(`button:has-text("${followText}")`).first();
+            // Try both button and role="button" elements
+            const buttonLocator = page.locator(`button:has-text("${followText}"), [role="button"]:has-text("${followText}")`).first();
             const count = await buttonLocator.count().catch(() => 0);
 
             if (count > 0) {
@@ -385,7 +386,7 @@ try {
         let stateType = null;
 
         try {
-          const allButtons = await page.locator('button').all();
+          const allButtons = await page.locator('button, [role="button"]').all();
           for (const btn of allButtons) {
             const text = await btn.textContent().catch(() => '');
             const trimmedText = text.trim();
@@ -444,8 +445,8 @@ try {
           let wasFollowRequest = false;
 
           try {
-            const allButtons = await page.locator('button').all();
-            logger.info(`Found ${allButtons.length} buttons after click, checking states...`);
+            const allButtons = await page.locator('button, [role="button"]').all();
+            logger.info(`Found ${allButtons.length} buttons/role buttons after click, checking states...`);
 
             // Log all button texts for debugging
             const buttonTexts = [];
