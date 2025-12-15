@@ -1,5 +1,5 @@
 import { Actor } from 'apify';
-import { chromium } from 'playwright';
+import { firefox } from 'playwright';
 
 // Multi-language support for button text detection
 const FOLLOW_TEXTS = [
@@ -142,41 +142,46 @@ try {
     }
   }
 
-  // Launch browser with optional proxy and anti-detection measures
+  // Launch Firefox browser (harder to detect than Chromium)
   const launchOptions = {
     headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-infobars',
-      '--window-size=1920,1080',
-      '--start-maximized',
-    ],
   };
 
   if (proxyUrl) {
     launchOptions.proxy = { server: proxyUrl };
   }
 
-  const browser = await chromium.launch(launchOptions);
+  logger.info('Launching Firefox browser...');
+  const browser = await firefox.launch(launchOptions);
 
   // Create context with realistic browser settings
   const context = await browser.newContext({
     viewport: { width: 1920, height: 1080 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
     locale: 'en-US',
     timezoneId: 'America/New_York',
-    deviceScaleFactor: 1,
-    hasTouch: false,
-    isMobile: false,
   });
 
   const page = await context.newPage();
 
-  // Remove webdriver flag to avoid detection
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  // Listen for console messages to debug
+  page.on('console', msg => {
+    if (msg.type() === 'error') {
+      logger.warning(`Browser console error: ${msg.text()}`);
+    }
+  });
+
+  // Listen for failed requests
+  page.on('requestfailed', request => {
+    logger.warning(`Request failed: ${request.url()} - ${request.failure()?.errorText}`);
+  });
+
+  // Log response status for main document requests
+  page.on('response', response => {
+    const url = response.url();
+    if (url.includes('instagram.com') && !url.includes('.js') && !url.includes('.css') && !url.includes('.png') && !url.includes('.jpg')) {
+      logger.info(`Response: ${response.status()} ${response.statusText()} - ${url.substring(0, 80)}`);
+    }
   });
 
   // Set session cookie
