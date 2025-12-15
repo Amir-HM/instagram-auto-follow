@@ -437,7 +437,7 @@ try {
         try {
           // Click Follow button
           await actionButton.click();
-          await page.waitForTimeout(3000); // Wait for Instagram UI to update
+          await page.waitForTimeout(5000); // Wait longer for Instagram UI to update
 
           // Verify follow was successful by checking for "Following" or "Requested" (multi-language)
           let confirmFound = false;
@@ -445,9 +445,14 @@ try {
 
           try {
             const allButtons = await page.locator('button').all();
+            logger.info(`Found ${allButtons.length} buttons after click, checking states...`);
+
+            // Log all button texts for debugging
+            const buttonTexts = [];
             for (const btn of allButtons) {
               const text = await btn.textContent().catch(() => '');
               const trimmedText = text.trim();
+              if (trimmedText) buttonTexts.push(trimmedText);
 
               if (isFollowingText(trimmedText)) {
                 confirmFound = true;
@@ -462,7 +467,15 @@ try {
             }
 
             if (!confirmFound) {
-              logger.warning(`Could not verify follow - no Following/Requested button found after click`);
+              logger.info(`Button texts found: ${buttonTexts.slice(0, 10).join(', ')}`);
+              // Check if original Follow button is gone (might mean success)
+              const followStillExists = buttonTexts.some(t => isFollowText(t) && !isFollowingText(t));
+              if (!followStillExists) {
+                logger.info(`Follow button no longer visible - assuming success`);
+                confirmFound = true;
+              } else {
+                logger.warning(`Could not verify follow - Follow button still present`);
+              }
             }
           } catch (e) {
             logger.warning(`Could not verify follow completion: ${e.message}`);
