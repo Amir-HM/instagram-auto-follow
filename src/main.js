@@ -1,6 +1,80 @@
 import { Actor } from 'apify';
 import { chromium } from 'playwright';
 
+// Multi-language support for button text detection
+const FOLLOW_TEXTS = [
+  'Follow', 'follow', 'FOLLOW',
+  'Seguir', 'seguir',           // Spanish, Portuguese
+  'Suivre', 'suivre',           // French
+  'Folgen', 'folgen',           // German
+  'Segui', 'segui',             // Italian
+  'Volgen', 'volgen',           // Dutch
+  'Følg', 'følg',               // Danish, Norwegian
+  'Följa', 'följa',             // Swedish
+  'Seuraa', 'seuraa',           // Finnish
+  'Obserwuj', 'obserwuj',       // Polish
+  'Sledovat', 'sledovat',       // Czech
+  'Takip Et', 'takip et',       // Turkish
+  'Ακολούθησε',                 // Greek
+  'Подписаться',                // Russian
+  'フォローする',                // Japanese
+  '팔로우',                      // Korean
+  '关注', '關注',                // Chinese (Simplified/Traditional)
+  'متابعة',                     // Arabic
+  'עקוב',                       // Hebrew
+  'ติดตาม',                     // Thai
+  'Theo dõi',                   // Vietnamese
+];
+
+const FOLLOWING_TEXTS = [
+  'Following', 'following', 'FOLLOWING',
+  'Siguiendo', 'siguiendo',     // Spanish
+  'Seguindo', 'seguindo',       // Portuguese
+  'Abonné', 'abonné',           // French
+  'Abonniert', 'abonniert',     // German
+  'Segui già', 'segui già',     // Italian
+  'Volgend', 'volgend',         // Dutch
+  'Følger', 'følger',           // Danish, Norwegian
+  'Följer', 'följer',           // Swedish
+  'Seurataan', 'seurataan',     // Finnish
+  'Obserwujesz',                // Polish
+  'Sledujete',                  // Czech
+  'Takip Ediyorsun',            // Turkish
+  'Ακολουθείς',                 // Greek
+  'Подписки',                   // Russian
+  'フォロー中',                  // Japanese
+  '팔로잉',                      // Korean
+  '正在关注', '正在關注',        // Chinese
+  'متابَع',                     // Arabic
+  'עוקב/ת',                     // Hebrew
+  'กำลังติดตาม',                // Thai
+  'Đang theo dõi',              // Vietnamese
+];
+
+const REQUESTED_TEXTS = [
+  'Requested', 'requested', 'REQUESTED',
+  'Solicitado', 'solicitado',   // Spanish, Portuguese
+  'Demandé', 'demandé',         // French
+  'Angefragt', 'angefragt',     // German
+  'Richiesto', 'richiesto',     // Italian
+  'Aangevraagd',                // Dutch
+  'Anmodet', 'Forespurt',       // Danish, Norwegian
+  'Begärd', 'begärd',           // Swedish
+  'Pyydetty',                   // Finnish
+  'Wysłano prośbę',             // Polish
+  'Požadováno',                 // Czech
+  'İstendi',                    // Turkish
+  'Αίτημα',                     // Greek
+  'Запрошено',                  // Russian
+  'リクエスト済み',              // Japanese
+  '요청됨',                      // Korean
+  '已请求', '已請求',            // Chinese
+  'تم الطلب',                   // Arabic
+  'נשלחה בקשה',                 // Hebrew
+  'ส่งคำขอแล้ว',                // Thai
+  'Đã yêu cầu',                 // Vietnamese
+];
+
 // Initialize the actor on the Apify platform
 await Actor.init();
 
@@ -163,107 +237,95 @@ try {
 
       logger.info(`Looking for Follow button...`);
 
+      // Helper function to check if text matches any Follow button text
+      const isFollowText = (text) => FOLLOW_TEXTS.some(t => text.trim() === t);
+      const isFollowingText = (text) => FOLLOWING_TEXTS.some(t => text.trim() === t);
+      const isRequestedText = (text) => REQUESTED_TEXTS.some(t => text.trim() === t);
+
       // Look for Follow button - use locator for better resilience
       let actionButton = null;
       let actionButtonFound = false;
 
+      // Strategy 1: Search all buttons for exact text match (most reliable with multi-language)
       try {
-        // Strategy 1: Try to find button with locator using text
-        const buttonLocator = page.locator(`button:has-text("Follow"), button:has-text("follow")`).first();
-        const count = await buttonLocator.count().catch(() => 0);
+        const allButtons = await page.locator('button').all();
+        logger.info(`Found ${allButtons.length} buttons total on page`);
 
-        if (count > 0) {
-          // Make sure it's not "Following" or "Requested"
-          const text = await buttonLocator.textContent().catch(() => '');
-          if (text.trim() === 'Follow') {
-            logger.info(`Found Follow button using text locator`);
-            actionButton = buttonLocator;
-            actionButtonFound = true;
+        for (let i = 0; i < allButtons.length; i++) {
+          const btn = allButtons[i];
+          try {
+            const text = await btn.textContent().catch(() => '');
+            const trimmedText = text.trim();
+
+            // Check if it's a Follow button (not Following or Requested)
+            if (isFollowText(trimmedText) && !isFollowingText(trimmedText) && !isRequestedText(trimmedText)) {
+              logger.info(`Found Follow button at index ${i} with text: "${trimmedText}"`);
+              actionButton = btn;
+              actionButtonFound = true;
+              break;
+            }
+          } catch (e) {
+            // Skip this button
           }
         }
 
         if (!actionButtonFound) {
-          logger.info(`Strategy 1 failed - no Follow button found`);
+          logger.info(`Strategy 1 failed - no Follow button found among ${allButtons.length} buttons`);
         }
       } catch (e) {
         logger.warning(`Strategy 1 error: ${e.message}`);
       }
 
-      // Strategy 2: Look for button by aria-label
+      // Strategy 2: Try locator with common Follow texts
       if (!actionButtonFound) {
         try {
-          const ariaButtonLocator = page.locator(`button[aria-label*="Follow"]`).first();
-          const count = await ariaButtonLocator.count().catch(() => 0);
+          for (const followText of FOLLOW_TEXTS.slice(0, 10)) { // Try first 10 common ones
+            const buttonLocator = page.locator(`button:has-text("${followText}")`).first();
+            const count = await buttonLocator.count().catch(() => 0);
 
-          if (count > 0) {
-            const ariaLabel = await ariaButtonLocator.getAttribute('aria-label').catch(() => '');
-            // Make sure it's not "Following" or contains "Unfollow"
-            if (ariaLabel && !ariaLabel.includes('Following') && !ariaLabel.includes('Unfollow')) {
-              logger.info(`Found Follow button using aria-label`);
-              actionButton = ariaButtonLocator;
-              actionButtonFound = true;
+            if (count > 0) {
+              const text = await buttonLocator.textContent().catch(() => '');
+              if (isFollowText(text) && !isFollowingText(text)) {
+                logger.info(`Found Follow button using locator for "${followText}"`);
+                actionButton = buttonLocator;
+                actionButtonFound = true;
+                break;
+              }
             }
           }
 
           if (!actionButtonFound) {
-            logger.info(`Strategy 2 failed - no Follow button found with aria-label`);
+            logger.info(`Strategy 2 failed - no Follow button found with text locators`);
           }
         } catch (e) {
           logger.warning(`Strategy 2 error: ${e.message}`);
         }
       }
 
-      // Strategy 3: Search all buttons for exact text match
-      if (!actionButtonFound) {
-        try {
-          const allButtons = await page.locator('button').all();
-          logger.info(`Found ${allButtons.length} buttons total on page`);
-
-          for (let i = 0; i < allButtons.length; i++) {
-            const btn = allButtons[i];
-            try {
-              const text = await btn.textContent().catch(() => '');
-              if (text.trim() === 'Follow') {
-                logger.info(`Found button at index ${i} with exact text match: "Follow"`);
-                actionButton = btn;
-                actionButtonFound = true;
-                break;
-              }
-            } catch (e) {
-              // Skip this button
-            }
-          }
-
-          if (!actionButtonFound) {
-            logger.info(`Strategy 3 failed - no exact text match for "Follow" among ${allButtons.length} buttons`);
-          }
-        } catch (e) {
-          logger.warning(`Strategy 3 error: ${e.message}`);
-        }
-      }
-
       if (!actionButtonFound) {
         logger.info(`Follow button not found, checking if already following...`);
 
-        // Check if already following or requested
+        // Check if already following or requested (multi-language support)
         let alreadyInState = false;
         let stateType = null;
 
         try {
-          const followingLocator = page.locator(`button:has-text("Following")`).first();
-          const requestedLocator = page.locator(`button:has-text("Requested")`).first();
+          const allButtons = await page.locator('button').all();
+          for (const btn of allButtons) {
+            const text = await btn.textContent().catch(() => '');
+            const trimmedText = text.trim();
 
-          const followingCount = await followingLocator.count().catch(() => 0);
-          const reqCount = await requestedLocator.count().catch(() => 0);
-
-          if (followingCount > 0) {
-            alreadyInState = true;
-            stateType = 'already_following';
-            logger.info(`Found "Following" button - already following this user`);
-          } else if (reqCount > 0) {
-            alreadyInState = true;
-            stateType = 'already_requested';
-            logger.info(`Found "Requested" button - already sent follow request`);
+            if (isFollowingText(trimmedText)) {
+              alreadyInState = true;
+              stateType = 'already_following';
+              logger.info(`Found Following button with text: "${trimmedText}" - already following this user`);
+              break;
+            } else if (isRequestedText(trimmedText)) {
+              alreadyInState = true;
+              stateType = 'already_requested';
+              logger.info(`Found Requested button with text: "${trimmedText}" - already sent follow request`);
+              break;
+            }
           }
         } catch (e) {
           logger.warning(`Could not check follow state: ${e.message}`);
@@ -302,26 +364,30 @@ try {
           await actionButton.click();
           await page.waitForTimeout(3000); // Wait for Instagram UI to update
 
-          // Verify follow was successful by checking for "Following" or "Requested"
+          // Verify follow was successful by checking for "Following" or "Requested" (multi-language)
           let confirmFound = false;
           let wasFollowRequest = false;
 
           try {
-            const followingLocator = page.locator(`button:has-text("Following")`).first();
-            const requestedLocator = page.locator(`button:has-text("Requested")`).first();
+            const allButtons = await page.locator('button').all();
+            for (const btn of allButtons) {
+              const text = await btn.textContent().catch(() => '');
+              const trimmedText = text.trim();
 
-            const followingCount = await followingLocator.count().catch(() => 0);
-            const reqCount = await requestedLocator.count().catch(() => 0);
+              if (isFollowingText(trimmedText)) {
+                confirmFound = true;
+                logger.info(`Found Following button with text: "${trimmedText}" - follow confirmed`);
+                break;
+              } else if (isRequestedText(trimmedText)) {
+                confirmFound = true;
+                wasFollowRequest = true;
+                logger.info(`Found Requested button with text: "${trimmedText}" - follow request sent (private account)`);
+                break;
+              }
+            }
 
-            if (followingCount > 0) {
-              confirmFound = true;
-              logger.info(`Found "Following" button - follow confirmed`);
-            } else if (reqCount > 0) {
-              confirmFound = true;
-              wasFollowRequest = true;
-              logger.info(`Found "Requested" button - follow request sent (private account)`);
-            } else {
-              logger.warning(`Could not verify follow - neither "Following" nor "Requested" button found after click`);
+            if (!confirmFound) {
+              logger.warning(`Could not verify follow - no Following/Requested button found after click`);
             }
           } catch (e) {
             logger.warning(`Could not verify follow completion: ${e.message}`);
