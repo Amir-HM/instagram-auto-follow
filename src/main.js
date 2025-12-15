@@ -133,12 +133,21 @@ try {
   logger.info(`Total users to process: ${targetUsers.length}`);
 
   // Configure proxy if provided
-  let proxyUrl = null;
+  let proxySettings = null;
   if (proxyConfiguration) {
     const proxyConfig = await Actor.createProxyConfiguration(proxyConfiguration);
     if (proxyConfig) {
-      proxyUrl = await proxyConfig.newUrl();
+      const proxyUrl = await proxyConfig.newUrl();
       logger.info(`Using proxy: ${proxyUrl.replace(/:[^:@]+@/, ':****@')}`);
+
+      // Parse proxy URL to extract credentials (format: http://username:password@host:port)
+      const proxyUrlObj = new URL(proxyUrl);
+      proxySettings = {
+        server: `${proxyUrlObj.protocol}//${proxyUrlObj.host}`,
+        username: proxyUrlObj.username,
+        password: proxyUrlObj.password,
+      };
+      logger.info(`Proxy server: ${proxySettings.server}, username: ${proxySettings.username}`);
     }
   }
 
@@ -154,8 +163,8 @@ try {
     ],
   };
 
-  if (proxyUrl) {
-    launchOptions.proxy = { server: proxyUrl };
+  if (proxySettings) {
+    launchOptions.proxy = proxySettings;
   }
 
   logger.info('Launching Chromium browser...');
