@@ -60,10 +60,6 @@
       "type": "object",
       "description": "Select proxies to be used. Residential proxies are recommended for Instagram to avoid blocks.",
       "editor": "proxy",
-      "default": {
-        "useApifyProxy": true,
-        "apifyProxyGroups": ["RESIDENTIAL"]
-      },
       "sectionCaption": "Proxy Configuration",
       "sectionDescription": "Configure proxy settings to avoid IP blocks and improve success rates."
     }
