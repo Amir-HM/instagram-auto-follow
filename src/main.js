@@ -142,10 +142,17 @@ try {
     }
   }
 
-  // Launch browser with optional proxy
+  // Launch browser with optional proxy and anti-detection measures
   const launchOptions = {
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+      '--window-size=1920,1080',
+      '--start-maximized',
+    ],
   };
 
   if (proxyUrl) {
@@ -154,8 +161,23 @@ try {
 
   const browser = await chromium.launch(launchOptions);
 
-  const context = await browser.newContext();
+  // Create context with realistic browser settings
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    locale: 'en-US',
+    timezoneId: 'America/New_York',
+    deviceScaleFactor: 1,
+    hasTouch: false,
+    isMobile: false,
+  });
+
   const page = await context.newPage();
+
+  // Remove webdriver flag to avoid detection
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  });
 
   // Set session cookie
   await context.addCookies([
