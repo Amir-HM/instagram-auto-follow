@@ -98,9 +98,9 @@ try {
 
   logger.info('Session cookie set');
 
-  // Navigate to Instagram with lenient timeout
+  // Navigate to Instagram with lenient timeout (longer for proxies)
   try {
-    await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
   } catch (e) {
     logger.warning('Instagram home page load timeout, continuing anyway...');
   }
@@ -123,18 +123,18 @@ try {
     try {
       logger.info(`Processing user: ${username}`);
 
-      // Navigate to user profile
+      // Navigate to user profile (longer timeout for residential proxies)
       const profileUrl = `https://www.instagram.com/${username}/`;
       logger.info(`Navigating to: ${profileUrl}`);
       try {
-        await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
       } catch (error) {
-        throw new Error('Failed to navigate to profile URL');
+        logger.warning(`Navigation timeout for ${username}, checking if page loaded anyway...`);
       }
 
-      // Wait longer for Instagram to load all profile content
+      // Wait for Instagram to load profile content
       logger.info(`Waiting for profile to fully load...`);
-      await page.waitForTimeout(3000);
+      await page.waitForTimeout(5000);
 
       // Additional wait for specific profile elements to be present
       try {
