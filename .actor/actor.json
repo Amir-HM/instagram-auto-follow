@@ -5,6 +5,7 @@
   "title": "Instagram Auto Follow",
   "description": "Automatically follow Instagram accounts with smart pacing to avoid action blocks",
   "version": "1.0",
+  "input": "./input_schema.json",
   "docUrl": "https://apify.com/amir-hm/instagram-auto-follow",
   "dockerfile": ".actor/Dockerfile",
   "meta": {
