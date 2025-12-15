@@ -1,5 +1,5 @@
 import { Actor } from 'apify';
-import { firefox } from 'playwright';
+import { chromium } from 'playwright';
 
 // Multi-language support for button text detection
 const FOLLOW_TEXTS = [
@@ -142,17 +142,24 @@ try {
     }
   }
 
-  // Launch Firefox browser (harder to detect than Chromium)
+  // Launch Chromium browser with anti-detection
   const launchOptions = {
     headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+      '--window-size=1920,1080',
+    ],
   };
 
   if (proxyUrl) {
     launchOptions.proxy = { server: proxyUrl };
   }
 
-  logger.info('Launching Firefox browser...');
-  const browser = await firefox.launch(launchOptions);
+  logger.info('Launching Chromium browser...');
+  const browser = await chromium.launch(launchOptions);
 
   // Create context with realistic browser settings
   const context = await browser.newContext({
@@ -163,6 +170,14 @@ try {
   });
 
   const page = await context.newPage();
+
+  // Remove webdriver flag to avoid detection
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    // Also hide automation indicators
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+  });
 
   // Listen for console messages to debug
   page.on('console', msg => {
