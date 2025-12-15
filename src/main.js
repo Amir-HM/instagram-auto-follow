@@ -326,6 +326,22 @@ try {
         const allButtons = await page.locator('button, [role="button"]').all();
         logger.info(`Found ${allButtons.length} buttons/role buttons total on page`);
 
+        // Debug: Log all button texts to understand what's on the page
+        const allButtonTexts = [];
+        for (let i = 0; i < allButtons.length; i++) {
+          const btn = allButtons[i];
+          try {
+            const text = await btn.textContent().catch(() => '');
+            const trimmedText = text.trim();
+            if (trimmedText && trimmedText.length < 50) {
+              allButtonTexts.push(trimmedText);
+            }
+          } catch (e) {
+            // Skip
+          }
+        }
+        logger.info(`Button texts found: ${JSON.stringify(allButtonTexts)}`);
+
         for (let i = 0; i < allButtons.length; i++) {
           const btn = allButtons[i];
           try {
