@@ -174,9 +174,17 @@ try {
 
   // Navigate to Instagram with lenient timeout (longer for proxies)
   try {
-    await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto('https://www.instagram.com', { waitUntil: 'networkidle', timeout: 60000 });
+    logger.info('Instagram home page loaded successfully');
   } catch (e) {
     logger.warning('Instagram home page load timeout, continuing anyway...');
+  }
+
+  // Check if we're on the login page (session might be invalid)
+  const currentUrl = page.url();
+  logger.info(`Current URL: ${currentUrl}`);
+  if (currentUrl.includes('/accounts/login')) {
+    logger.warning('Redirected to login page - session cookie may be invalid or expired');
   }
 
   let followCount = 0;
@@ -201,14 +209,30 @@ try {
       const profileUrl = `https://www.instagram.com/${username}/`;
       logger.info(`Navigating to: ${profileUrl}`);
       try {
-        await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto(profileUrl, { waitUntil: 'networkidle', timeout: 60000 });
+        logger.info(`Page loaded for ${username}`);
       } catch (error) {
         logger.warning(`Navigation timeout for ${username}, checking if page loaded anyway...`);
+      }
+
+      // Debug: Log current URL and page title
+      const pageUrl = page.url();
+      const pageTitle = await page.title().catch(() => 'unknown');
+      logger.info(`Current URL: ${pageUrl}`);
+      logger.info(`Page title: ${pageTitle}`);
+
+      // Check for login redirect
+      if (pageUrl.includes('/accounts/login')) {
+        throw new Error('Session expired - redirected to login page');
       }
 
       // Wait for Instagram to load profile content
       logger.info(`Waiting for profile to fully load...`);
       await page.waitForTimeout(5000);
+
+      // Debug: Log page HTML length to see if content loaded
+      const htmlLength = await page.evaluate(() => document.body?.innerHTML?.length || 0).catch(() => 0);
+      logger.info(`Page HTML length: ${htmlLength} characters`);
 
       // Additional wait for specific profile elements to be present
       try {
