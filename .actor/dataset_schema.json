@@ -1,0 +1,64 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "username": {
+      "type": "string",
+      "title": "Username",
+      "description": "Instagram username"
+    },
+    "status": {
+      "type": "string",
+      "title": "Status",
+      "description": "Result status",
+      "enum": ["followed", "requested", "already_following", "already_requested", "failed"]
+    },
+    "success": {
+      "type": "boolean",
+      "title": "Success",
+      "description": "Whether the action was successful"
+    },
+    "reason": {
+      "type": "string",
+      "title": "Reason",
+      "description": "Explanation of the result"
+    },
+    "timestamp": {
+      "type": "string",
+      "title": "Timestamp",
+      "description": "When the action was performed"
+    }
+  },
+  "views": {
+    "overview": {
+      "title": "Follow Results",
+      "transformation": {
+        "fields": ["username", "status", "success", "reason", "timestamp"]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "username": {
+            "label": "Username",
+            "format": "text"
+          },
+          "status": {
+            "label": "Status",
+            "format": "text"
+          },
+          "success": {
+            "label": "Success",
+            "format": "boolean"
+          },
+          "reason": {
+            "label": "Reason",
+            "format": "text"
+          },
+          "timestamp": {
+            "label": "Timestamp",
+            "format": "text"
+          }
+        }
+      }
+    }
+  }
+}
