@@ -1,5 +1,4 @@
 {
-  "actorSpecVersion": 1,
   "actorSpecification": 1,
   "name": "instagram-auto-follow",
   "title": "Instagram Auto Follow",
@@ -7,32 +6,8 @@
   "version": "1.0",
   "input": "./input_schema.json",
   "storages": {
-    "dataset": {
-      "actorSpecification": 1,
-      "title": "Follow Results",
-      "views": {
-        "results": {
-          "title": "Follow Results",
-          "transformation": {
-            "fields": ["username", "status", "success", "reason", "timestamp"]
-          },
-          "display": {
-            "component": "table",
-            "properties": {
-              "username": { "label": "Username", "format": "text" },
-              "status": { "label": "Status", "format": "text" },
-              "success": { "label": "Success", "format": "boolean" },
-              "reason": { "label": "Reason", "format": "text" },
-              "timestamp": { "label": "Timestamp", "format": "text" }
-            }
-          }
-        }
-      }
-    }
+    "dataset": "./dataset_schema.json"
   },
-  "docUrl": "https://apify.com/amir-hm/instagram-auto-follow",
-  "dockerfile": ".actor/Dockerfile",
-  "meta": {
-    "templateId": "instagram_auto_follow"
-  }
+  "dockerfile": "./Dockerfile",
+  "readme": "../README.md"
 }
