@@ -6,6 +6,30 @@
   "description": "Automatically follow Instagram accounts with smart pacing to avoid action blocks",
   "version": "1.0",
   "input": "./input_schema.json",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Follow Results",
+      "views": {
+        "results": {
+          "title": "Follow Results",
+          "transformation": {
+            "fields": ["username", "status", "success", "reason", "timestamp"]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "username": { "label": "Username", "format": "text" },
+              "status": { "label": "Status", "format": "text" },
+              "success": { "label": "Success", "format": "boolean" },
+              "reason": { "label": "Reason", "format": "text" },
+              "timestamp": { "label": "Timestamp", "format": "text" }
+            }
+          }
+        }
+      }
+    }
+  },
   "docUrl": "https://apify.com/amir-hm/instagram-auto-follow",
   "dockerfile": ".actor/Dockerfile",
   "meta": {
