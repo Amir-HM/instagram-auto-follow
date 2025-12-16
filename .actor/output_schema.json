@@ -1,0 +1,12 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "Instagram Auto Follow Results",
+  "description": "Results of follow operations including success/failure status for each user",
+  "properties": {
+    "results": {
+      "type": "string",
+      "title": "Follow Results",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    }
+  }
+}

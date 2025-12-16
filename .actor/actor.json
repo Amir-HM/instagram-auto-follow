@@ -5,6 +5,7 @@
   "description": "Automatically follow Instagram accounts with smart pacing to avoid action blocks",
   "version": "1.0",
   "input": "./input_schema.json",
+  "output": "./output_schema.json",
   "storages": {
     "dataset": "./dataset_schema.json"
   },
