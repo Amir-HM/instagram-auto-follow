@@ -2,6 +2,7 @@
   "actorOutputSchemaVersion": 1,
   "title": "Instagram Auto Follow Results",
   "description": "Successful follows/requests are in the dataset (billable); the full per-user report and summary are in the RUN_REPORT key-value store record",
+  "type": "object",
   "properties": {
     "results": {
       "type": "string",
