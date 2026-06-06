@@ -9,13 +9,13 @@
     "status": {
       "type": "string",
       "title": "Status",
-      "description": "Result status",
-      "enum": ["followed", "requested", "already_following", "already_requested", "failed"]
+      "description": "Result status (only successful actions appear in dataset)",
+      "enum": ["followed", "requested"]
     },
     "success": {
       "type": "boolean",
       "title": "Success",
-      "description": "Whether the action was successful"
+      "description": "Whether the action was successful (always true in dataset)"
     },
     "reason": {
       "type": "string",
@@ -26,13 +26,23 @@
       "type": "string",
       "title": "Timestamp",
       "description": "When the action was performed"
+    },
+    "runDate": {
+      "type": "string",
+      "title": "Run Date",
+      "description": "ISO timestamp of when the run was executed"
+    },
+    "accountType": {
+      "type": "string",
+      "title": "Account Type",
+      "description": "Account type setting used for the run (new or mature)"
     }
   },
   "views": {
     "overview": {
       "title": "Follow Results",
       "transformation": {
-        "fields": ["username", "status", "success", "reason", "timestamp"]
+        "fields": ["username", "status", "reason", "timestamp", "accountType"]
       },
       "display": {
         "component": "table",
@@ -45,16 +55,16 @@
             "label": "Status",
             "format": "text"
           },
-          "success": {
-            "label": "Success",
-            "format": "boolean"
-          },
           "reason": {
             "label": "Reason",
             "format": "text"
           },
           "timestamp": {
             "label": "Timestamp",
+            "format": "text"
+          },
+          "accountType": {
+            "label": "Account Type",
             "format": "text"
           }
         }
