@@ -188,21 +188,33 @@ try {
     Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
   });
 
-  // Block heavy resources we never need (images, media, fonts) to cut load
-  // time and bandwidth. The actor only needs the DOM to find/click buttons,
-  // so blocking these dramatically reduces runtime (and Apify compute cost).
+  // Resource types to block - we never need images/media/fonts for button clicking.
+  // Defined as a Set so the console error filter can reference the same list.
+  const blockedResourceTypes = new Set(['image', 'media', 'font']);
+
+  // Block heavy resources to cut load time and bandwidth. The actor only needs
+  // the DOM to find/click buttons, so this dramatically reduces runtime cost.
   await page.route('**/*', (route) => {
     const type = route.request().resourceType();
-    if (type === 'image' || type === 'media' || type === 'font') {
+    if (blockedResourceTypes.has(type)) {
       return route.abort();
     }
     return route.continue();
   });
 
-  // Listen for console messages to debug
+  // Listen for console messages to debug. Filter out expected noise from resource
+  // blocking, but only for generic "Failed to load resource" errors - if the error
+  // mentions a specific URL or API endpoint, let it through as it may be important.
   page.on('console', msg => {
     if (msg.type() === 'error') {
-      logger.warning(`Browser console error: ${msg.text()}`);
+      const text = msg.text();
+      // Only suppress generic resource-failed messages, not API errors
+      const isGenericResourceError = text === 'Failed to load resource: net::ERR_FAILED' ||
+        text.includes('Permissions policy violation');
+      if (isGenericResourceError) {
+        return; // Expected noise from resource blocking
+      }
+      logger.warning(`Browser console error: ${text}`);
     }
   });
 
@@ -251,8 +263,9 @@ try {
   const usersNotProcessed = targetUsers.slice(maxFollowsPerRun);
   logger.info(`Will follow ${usersToProcessThisRun.length} users in this run`);
 
-  // Process each user
-  for (const username of usersToProcessThisRun) {
+  // Process each user (track index for rate-limit recovery)
+  for (let userIndex = 0; userIndex < usersToProcessThisRun.length; userIndex++) {
+    const username = usersToProcessThisRun[userIndex];
     try {
       logger.info(`Processing user: ${username}`);
 
@@ -279,13 +292,21 @@ try {
         throw new Error('Session expired - redirected to login page');
       }
 
-      // Wait for the profile's action buttons to render, short-circuiting as
-      // soon as they appear (typically 1-3s) instead of blindly sleeping.
+      // Wait for the profile's action buttons to render. We look for buttons with
+      // text content (not just any button) to avoid resolving early on nav chrome.
       logger.info(`Waiting for profile to load...`);
       await page.waitForFunction(() => {
-        return document.querySelectorAll(
+        const buttons = document.querySelectorAll(
           'header button, header [role="button"], main button, main [role="button"]'
-        ).length > 0;
+        );
+        // Check that at least one button has meaningful text (not just icons)
+        for (const btn of buttons) {
+          const text = btn.textContent?.trim();
+          if (text && text.length > 0 && text.length < 50) {
+            return true;
+          }
+        }
+        return false;
       }, { timeout: 15000 }).catch(() => {
         logger.warning(`Timeout waiting for profile buttons, continuing anyway...`);
       });
@@ -320,10 +341,21 @@ try {
       // then the page if the header isn't present (defensive against DOM changes).
       const headerCount = await page.locator('header').count().catch(() => 0);
       const mainCount = await page.locator('main').count().catch(() => 0);
-      const scope = headerCount > 0
-        ? page.locator('header')
-        : (mainCount > 0 ? page.locator('main') : page);
-      logger.info(`Button search scope: ${headerCount > 0 ? 'header' : (mainCount > 0 ? 'main' : 'page')}`);
+      let scopeName;
+      let scope;
+      if (headerCount > 0) {
+        scope = page.locator('header');
+        scopeName = 'header';
+      } else if (mainCount > 0) {
+        scope = page.locator('main');
+        scopeName = 'main';
+      } else {
+        // Fallback to full page - this risks clicking "Suggested for you" buttons
+        scope = page;
+        scopeName = 'page';
+        logger.warning(`Neither <header> nor <main> found - falling back to full page scope (risk of wrong button)`);
+      }
+      logger.info(`Button search scope: ${scopeName}`);
 
       logger.info(`Looking for Follow button...`);
 
@@ -343,11 +375,11 @@ try {
       let actionButtonFound = false;
 
       // Strategy 1: Search all buttons AND elements with role="button" (Instagram uses divs with role="button")
+      // Single pass: collect button texts for logging AND find the Follow button
       try {
         const allButtons = await scope.locator('button, [role="button"]').all();
         logger.info(`Found ${allButtons.length} buttons/role buttons in profile scope`);
 
-        // Debug: Log all button texts to understand what's on the page
         const allButtonTexts = [];
         for (let i = 0; i < allButtons.length; i++) {
           const btn = allButtons[i];
@@ -357,29 +389,19 @@ try {
             if (trimmedText && trimmedText.length < 50) {
               allButtonTexts.push(trimmedText);
             }
-          } catch (e) {
-            // Skip
-          }
-        }
-        logger.info(`Button texts found: ${JSON.stringify(allButtonTexts)}`);
-
-        for (let i = 0; i < allButtons.length; i++) {
-          const btn = allButtons[i];
-          try {
-            const text = await btn.textContent().catch(() => '');
-            const trimmedText = text.trim();
 
             // Check if it's a Follow button (not Following or Requested)
-            if (isFollowText(trimmedText) && !isFollowingText(trimmedText) && !isRequestedText(trimmedText)) {
+            if (!actionButtonFound && isFollowText(trimmedText) && !isFollowingText(trimmedText) && !isRequestedText(trimmedText)) {
               logger.info(`Found Follow button at index ${i} with text: "${trimmedText}"`);
               actionButton = btn;
               actionButtonFound = true;
-              break;
+              // Continue loop to collect all button texts for logging
             }
           } catch (e) {
             // Skip this button
           }
         }
+        logger.info(`Button texts found: ${JSON.stringify(allButtonTexts)}`);
 
         if (!actionButtonFound) {
           logger.info(`Strategy 1 failed - no Follow button found among ${allButtons.length} buttons`);
@@ -398,7 +420,9 @@ try {
 
             if (count > 0) {
               const text = await buttonLocator.textContent().catch(() => '');
-              if (isFollowText(text) && !isFollowingText(text)) {
+              // Must check all three: isFollowText already excludes Following/Requested
+              // internally, but we double-check here for safety
+              if (isFollowText(text) && !isFollowingText(text) && !isRequestedText(text)) {
                 logger.info(`Found Follow button using locator for "${followText}"`);
                 actionButton = buttonLocator;
                 actionButtonFound = true;
@@ -546,22 +570,25 @@ try {
         }
       }
 
-      // Add delay between follows (with random variation)
+      // Add delay between follows (with random variation). Always enforce a minimum
+      // of 100ms to avoid burst-firing follows with zero delay when both params are 0.
       const randomDelay = (Math.random() - 0.5) * 2 * randomDelayVariation;
-      const actualDelay = (delayBetweenFollows + randomDelay) * 1000;
-
-      if (actualDelay > 0) {
-        logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next follow`);
-        await page.waitForTimeout(Math.max(actualDelay, 100)); // Minimum 100ms for safety
-      } else {
-        logger.info(`No delay between follows`);
-      }
+      const actualDelay = Math.max((delayBetweenFollows + randomDelay) * 1000, 100);
+      logger.info(`Waiting ${Math.round(actualDelay / 1000)}s before next follow`);
+      await page.waitForTimeout(actualDelay);
 
     } catch (error) {
       logger.error(`Error processing ${username}: ${error.message}`);
 
-      // Check for rate limiting
-      if (error.message.includes('rate') || error.message.includes('429')) {
+      // Check for rate limiting - match various phrasings Instagram/Playwright might use
+      const errorLower = error.message.toLowerCase();
+      const isRateLimited = errorLower.includes('rate') ||
+        errorLower.includes('429') ||
+        errorLower.includes('too many') ||
+        errorLower.includes('throttle') ||
+        errorLower.includes('try again later') ||
+        errorLower.includes('action blocked');
+      if (isRateLimited) {
         rateLimited = true;
         results.push({
           username,
@@ -573,9 +600,9 @@ try {
           accountType,
         });
         logger.warning('Rate limit detected, stopping actor');
-        // Add remaining users to the list for next run
-        const currentIndex = usersToProcessThisRun.indexOf(username);
-        remainingUsers.push(...usersToProcessThisRun.slice(currentIndex + 1));
+        // Add remaining users to the list for next run (use loop index, not indexOf
+        // which would return first occurrence if there are duplicate usernames)
+        remainingUsers.push(...usersToProcessThisRun.slice(userIndex + 1));
         break;
       }
 
