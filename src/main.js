@@ -312,6 +312,19 @@ try {
         logger.info(`Profile found for ${username}`);
       }
 
+      // Scope ALL button lookups to the profile header. Instagram renders
+      // "Suggested for you" accounts (each with its own Follow button) elsewhere
+      // on the profile page; searching the whole page could grab one of those,
+      // click it, and falsely report the target as followed. The target's own
+      // Follow/Following/Requested button lives in <header>. Fall back to <main>
+      // then the page if the header isn't present (defensive against DOM changes).
+      const headerCount = await page.locator('header').count().catch(() => 0);
+      const mainCount = await page.locator('main').count().catch(() => 0);
+      const scope = headerCount > 0
+        ? page.locator('header')
+        : (mainCount > 0 ? page.locator('main') : page);
+      logger.info(`Button search scope: ${headerCount > 0 ? 'header' : (mainCount > 0 ? 'main' : 'page')}`);
+
       logger.info(`Looking for Follow button...`);
 
       // Helper function to check if text matches any Follow button text
@@ -331,8 +344,8 @@ try {
 
       // Strategy 1: Search all buttons AND elements with role="button" (Instagram uses divs with role="button")
       try {
-        const allButtons = await page.locator('button, [role="button"]').all();
-        logger.info(`Found ${allButtons.length} buttons/role buttons total on page`);
+        const allButtons = await scope.locator('button, [role="button"]').all();
+        logger.info(`Found ${allButtons.length} buttons/role buttons in profile scope`);
 
         // Debug: Log all button texts to understand what's on the page
         const allButtonTexts = [];
@@ -380,7 +393,7 @@ try {
         try {
           for (const followText of FOLLOW_TEXTS.slice(0, 10)) { // Try first 10 common ones
             // Try both button and role="button" elements
-            const buttonLocator = page.locator(`button:has-text("${followText}"), [role="button"]:has-text("${followText}")`).first();
+            const buttonLocator = scope.locator(`button:has-text("${followText}"), [role="button"]:has-text("${followText}")`).first();
             const count = await buttonLocator.count().catch(() => 0);
 
             if (count > 0) {
@@ -410,7 +423,7 @@ try {
         let stateType = null;
 
         try {
-          const allButtons = await page.locator('button, [role="button"]').all();
+          const allButtons = await scope.locator('button, [role="button"]').all();
           for (const btn of allButtons) {
             const text = await btn.textContent().catch(() => '');
             const trimmedText = text.trim();
@@ -469,7 +482,7 @@ try {
           let wasFollowRequest = false;
 
           try {
-            const allButtons = await page.locator('button, [role="button"]').all();
+            const allButtons = await scope.locator('button, [role="button"]').all();
             logger.info(`Found ${allButtons.length} buttons/role buttons after click, checking states...`);
 
             // Log all button texts for debugging
