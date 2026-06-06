@@ -85,22 +85,26 @@ The actor automatically tracks which accounts have been followed and removes the
 
 ## Output
 
-The actor provides detailed results in the dataset:
+### Dataset (successful follows only)
 
-### Per-User Results
+The dataset contains one item per **successful** follow or follow request — you are only charged for actual follows delivered, not for accounts you already follow or for failures:
 - **username**: Instagram username
-- **status**: One of `followed`, `requested`, `already_following`, or `failed`
-- **success**: Boolean flag
+- **status**: `followed` or `requested` (follow request sent to a private account)
+- **success**: Boolean flag (always `true` in the dataset)
 - **reason**: Explanation of the result
 - **timestamp**: When the action was performed
 
-### Summary Entry
+### Full run report (key-value store)
+
+A complete report is saved to the key-value store under the `RUN_REPORT` key, including **every** processed user (including `already_following` and `failed`) plus a summary:
 - **totalProcessed**: Total users attempted
 - **successCount**: Successfully followed
 - **requestedCount**: Follow requests sent (private accounts)
 - **alreadyFollowingCount**: Users already being followed
 - **failedCount**: Failed attempts
 - **remainingUsers**: Number of users still left to follow
+
+Users not yet followed are also saved under `CLEANED_INPUT` for the next run.
 
 ## Troubleshooting
 

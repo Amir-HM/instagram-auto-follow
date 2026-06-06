@@ -582,10 +582,15 @@ try {
   // Close browser
   await browser.close();
 
-  // Save results
-  for (const result of results) {
+  // Push to the billable default dataset ONLY for successful follows.
+  // Under Apify's pay-per-result pricing every dataset item is charged to the
+  // user, so we avoid billing them for no-ops (already-following / failed) or
+  // the summary. Those are still fully reported via logs and the key-value store.
+  const successfulResults = results.filter((r) => r.success);
+  for (const result of successfulResults) {
     await dataset.pushData(result);
   }
+  logger.info(`Pushed ${successfulResults.length} successful follow(s) to dataset (billable results)`);
 
   // Save cleaned input for next run (users not yet followed)
   const cleanedUsers = [...remainingUsers, ...usersNotProcessed];
@@ -595,7 +600,7 @@ try {
   });
   logger.info(`Saved ${cleanedUsers.length} users to CLEANED_INPUT for next run`);
 
-  // Add summary
+  // Build summary
   const summary = {
     type: 'summary',
     action: 'follow',
@@ -609,7 +614,10 @@ try {
     timestamp: new Date().toISOString(),
   };
 
-  await dataset.pushData(summary);
+  // Store the full run report (all statuses + summary) in the key-value store so
+  // users keep complete visibility without being charged per result for
+  // non-successful entries.
+  await keyValueStore.setValue('RUN_REPORT', { summary, results });
 
   logger.info('=== SUMMARY ===');
   logger.info(`Total processed: ${summary.totalProcessed}`);
