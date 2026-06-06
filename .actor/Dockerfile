@@ -1,8 +1,9 @@
 # Pin to a base image tag that bundles the EXACT Playwright version we use
-# (node 20 + Playwright 1.60.0). The rolling ":20" tag drifts to newer
+# (node 22 + Playwright 1.60.0). The rolling tags drift to newer
 # Playwright/Chromium builds that don't match our pinned npm package, causing
-# "Executable doesn't exist" launch failures.
-FROM apify/actor-node-playwright-chrome:20-1.60.0
+# "Executable doesn't exist" launch failures. Node 22 is the current Active LTS
+# (Node 20 reached end-of-life in April 2026).
+FROM apify/actor-node-playwright-chrome:22-1.60.0
 
 COPY --chown=myuser:myuser package*.json ./
 
