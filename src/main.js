@@ -649,6 +649,9 @@ try {
   // Exit the actor
   await Actor.exit();
 } catch (error) {
+  // A fatal error (e.g. browser failed to launch) must FAIL the run, not exit
+  // 0. Previously this called Actor.exit() which defaulted to success, so
+  // crashes were misreported as "Succeeded".
   console.error('Fatal error:', error);
-  await Actor.exit();
+  await Actor.fail(`Fatal error: ${error?.message || error}`);
 }
