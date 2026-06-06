@@ -1,12 +1,17 @@
 {
   "actorOutputSchemaVersion": 1,
   "title": "Instagram Auto Follow Results",
-  "description": "Results of follow operations including success/failure status for each user",
+  "description": "Successful follows/requests are in the dataset (billable); the full per-user report and summary are in the RUN_REPORT key-value store record",
   "properties": {
     "results": {
       "type": "string",
-      "title": "Follow Results",
+      "title": "Successful Follows (billable)",
       "template": "{{links.apiDefaultDatasetUrl}}/items"
+    },
+    "runReport": {
+      "type": "string",
+      "title": "Full Run Report (all statuses + summary)",
+      "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/RUN_REPORT"
     }
   }
 }

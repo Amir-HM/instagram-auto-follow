@@ -582,7 +582,8 @@ try {
   // Close browser
   await browser.close();
 
-  // Push to the billable default dataset ONLY for successful follows.
+  // Push to the billable default dataset ONLY for delivered actions, i.e. new
+  // follows AND follow requests to private accounts (both have success === true).
   // Under Apify's pay-per-result pricing every dataset item is charged to the
   // user, so we avoid billing them for no-ops (already-following / failed) or
   // the summary. Those are still fully reported via logs and the key-value store.
@@ -590,7 +591,7 @@ try {
   for (const result of successfulResults) {
     await dataset.pushData(result);
   }
-  logger.info(`Pushed ${successfulResults.length} successful follow(s) to dataset (billable results)`);
+  logger.info(`Pushed ${successfulResults.length} follow(s)/request(s) to dataset (billable results)`);
 
   // Save cleaned input for next run (users not yet followed)
   const cleanedUsers = [...remainingUsers, ...usersNotProcessed];
