@@ -188,23 +188,21 @@ try {
     Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
   });
 
+  // Block heavy resources we never need (images, media, fonts) to cut load
+  // time and bandwidth. The actor only needs the DOM to find/click buttons,
+  // so blocking these dramatically reduces runtime (and Apify compute cost).
+  await page.route('**/*', (route) => {
+    const type = route.request().resourceType();
+    if (type === 'image' || type === 'media' || type === 'font') {
+      return route.abort();
+    }
+    return route.continue();
+  });
+
   // Listen for console messages to debug
   page.on('console', msg => {
     if (msg.type() === 'error') {
       logger.warning(`Browser console error: ${msg.text()}`);
-    }
-  });
-
-  // Listen for failed requests
-  page.on('requestfailed', request => {
-    logger.warning(`Request failed: ${request.url()} - ${request.failure()?.errorText}`);
-  });
-
-  // Log response status for main document requests
-  page.on('response', response => {
-    const url = response.url();
-    if (url.includes('instagram.com') && !url.includes('.js') && !url.includes('.css') && !url.includes('.png') && !url.includes('.jpg')) {
-      logger.info(`Response: ${response.status()} ${response.statusText()} - ${url.substring(0, 80)}`);
     }
   });
 
@@ -223,9 +221,11 @@ try {
 
   logger.info('Session cookie set');
 
-  // Navigate to Instagram with lenient timeout (longer for proxies)
+  // Navigate to Instagram. Use 'domcontentloaded' instead of 'networkidle':
+  // Instagram polls telemetry endpoints continuously, so the network is never
+  // idle and 'networkidle' always burns the full timeout for no benefit.
   try {
-    await page.goto('https://www.instagram.com', { waitUntil: 'networkidle', timeout: 60000 });
+    await page.goto('https://www.instagram.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
     logger.info('Instagram home page loaded successfully');
   } catch (e) {
     logger.warning('Instagram home page load timeout, continuing anyway...');
@@ -256,11 +256,13 @@ try {
     try {
       logger.info(`Processing user: ${username}`);
 
-      // Navigate to user profile (longer timeout for residential proxies)
+      // Navigate to user profile. 'domcontentloaded' returns as soon as the
+      // HTML is parsed instead of waiting on Instagram's endless background
+      // polling, which previously timed out (~60s) on every single profile.
       const profileUrl = `https://www.instagram.com/${username}/`;
       logger.info(`Navigating to: ${profileUrl}`);
       try {
-        await page.goto(profileUrl, { waitUntil: 'networkidle', timeout: 60000 });
+        await page.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         logger.info(`Page loaded for ${username}`);
       } catch (error) {
         logger.warning(`Navigation timeout for ${username}, checking if page loaded anyway...`);
@@ -277,20 +279,20 @@ try {
         throw new Error('Session expired - redirected to login page');
       }
 
-      // Wait for Instagram to load profile content
-      logger.info(`Waiting for profile to fully load...`);
-      await page.waitForTimeout(5000);
+      // Wait for the profile's action buttons to render, short-circuiting as
+      // soon as they appear (typically 1-3s) instead of blindly sleeping.
+      logger.info(`Waiting for profile to load...`);
+      await page.waitForFunction(() => {
+        return document.querySelectorAll(
+          'header button, header [role="button"], main button, main [role="button"]'
+        ).length > 0;
+      }, { timeout: 15000 }).catch(() => {
+        logger.warning(`Timeout waiting for profile buttons, continuing anyway...`);
+      });
 
       // Debug: Log page HTML length to see if content loaded
       const htmlLength = await page.evaluate(() => document.body?.innerHTML?.length || 0).catch(() => 0);
       logger.info(`Page HTML length: ${htmlLength} characters`);
-
-      // Additional wait for specific profile elements to be present
-      try {
-        await page.waitForSelector('h2', { timeout: 5000 }).catch(() => null);
-      } catch (e) {
-        logger.warning(`Timeout waiting for profile name`);
-      }
 
       // Check if profile exists - use multiple detection methods
       const profileExists = await page.evaluate(() => {
@@ -580,10 +582,16 @@ try {
   // Close browser
   await browser.close();
 
-  // Save results
-  for (const result of results) {
+  // Push to the billable default dataset ONLY for delivered actions, i.e. new
+  // follows AND follow requests to private accounts (both have success === true).
+  // Under Apify's pay-per-result pricing every dataset item is charged to the
+  // user, so we avoid billing them for no-ops (already-following / failed) or
+  // the summary. Those are still fully reported via logs and the key-value store.
+  const successfulResults = results.filter((r) => r.success);
+  for (const result of successfulResults) {
     await dataset.pushData(result);
   }
+  logger.info(`Pushed ${successfulResults.length} follow(s)/request(s) to dataset (billable results)`);
 
   // Save cleaned input for next run (users not yet followed)
   const cleanedUsers = [...remainingUsers, ...usersNotProcessed];
@@ -593,7 +601,7 @@ try {
   });
   logger.info(`Saved ${cleanedUsers.length} users to CLEANED_INPUT for next run`);
 
-  // Add summary
+  // Build summary
   const summary = {
     type: 'summary',
     action: 'follow',
@@ -607,7 +615,10 @@ try {
     timestamp: new Date().toISOString(),
   };
 
-  await dataset.pushData(summary);
+  // Store the full run report (all statuses + summary) in the key-value store so
+  // users keep complete visibility without being charged per result for
+  // non-successful entries.
+  await keyValueStore.setValue('RUN_REPORT', { summary, results });
 
   logger.info('=== SUMMARY ===');
   logger.info(`Total processed: ${summary.totalProcessed}`);

@@ -3,7 +3,7 @@
   "name": "instagram-auto-follow",
   "title": "Instagram Auto Follow",
   "description": "Automatically follow Instagram accounts with smart pacing to avoid action blocks",
-  "version": "1.0",
+  "version": "1.1",
   "input": "./input_schema.json",
   "output": "./output_schema.json",
   "storages": {
